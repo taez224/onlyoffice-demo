@@ -1,0 +1,15 @@
+# Server configuration (base URL for backend)
+# In Docker environment use host.docker.internal; for local dev you can set http://localhost:8080
+server:
+  baseUrl: http://host.docker.internal:8080
+
+# ONLYOFFICE Document Server Settings
+# Replace with your actual Document Server URL
+onlyoffice:
+  url: http://localhost:80
+  # The secret key must match the one in ONLYOFFICE Document Server config (local.json or env var)
+  secret: your-secret-key-must-be-at-least-32-characters-long-for-hs256
+
+# Storage configuration
+storage:
+  path: storage

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>ONLYOFFICE Editor</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #placeholder {
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="placeholder"></div>
+
+    <script th:src="${onlyofficeApiUrl}"></script>
+    <script th:inline="javascript">
+        /*<![CDATA[*/
+        var config = /*[[${config}]]*/ {};
+        var docEditor = new DocsAPI.DocEditor("placeholder", config);
+        /*]]>*/
+    </script>
+</body>
+</html>
