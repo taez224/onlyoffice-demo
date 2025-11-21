@@ -1,0 +1,17 @@
+services:
+  onlyoffice-docs:
+    image: onlyoffice/documentserver:9.1
+    container_name: onlyoffice-docs
+    ports:
+      - "9980:80"
+    environment:
+      # To enable JWT, set JWT_ENABLED=true and provide a secret
+      - JWT_ENABLED=true
+      - JWT_SECRET=your-secret-key-must-be-at-least-32-characters-long-for-hs256
+      # - JWT_HEADER=Authorization
+      # - JWT_IN_BODY=true
+    volumes:
+      - ./onlyoffice_data/logs:/var/log/onlyoffice
+      - ./onlyoffice_data/data:/var/www/onlyoffice/Data
+      - ./onlyoffice_data/lib:/var/lib/onlyoffice
+    restart: always

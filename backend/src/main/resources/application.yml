@@ -6,7 +6,7 @@ server:
 # ONLYOFFICE Document Server Settings
 # Replace with your actual Document Server URL
 onlyoffice:
-  url: http://localhost:80
+  url: http://localhost:9980
   # The secret key must match the one in ONLYOFFICE Document Server config (local.json or env var)
   secret: your-secret-key-must-be-at-least-32-characters-long-for-hs256
 

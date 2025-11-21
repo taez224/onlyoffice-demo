@@ -68,3 +68,4 @@ Thumbs.db
 # ========================================
 .env.local
 .env.*.local
+onlyoffice_data/

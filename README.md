@@ -88,17 +88,14 @@ openssl rand -hex 32
 
 ### 2단계: ONLYOFFICE Document Server 실행
 
+프로젝트 루트에 포함된 `docker-compose.yml`을 사용하여 실행하는 것을 권장합니다.
+이 설정에는 **JWT가 이미 활성화**되어 있으며, 데이터 보존을 위한 볼륨 설정도 포함되어 있습니다.
+
 ```bash
-docker run -d -p 80:80 onlyoffice/documentserver
+docker-compose up -d
 ```
 
-> **참고**: JWT를 활성화하려면 다음과 같이 실행하세요:
-> ```bash
-> docker run -d -p 80:80 \
->   -e JWT_ENABLED=true \
->   -e JWT_SECRET=YOUR_GENERATED_SECRET \
->   onlyoffice/documentserver
-> ```
+실행이 완료되면 `http://localhost:9980/welcome/`에 접속하여 서버가 정상 작동하는지 확인할 수 있습니다.
 
 ### 3단계: Backend 설정 (선택 사항)
 
@@ -106,8 +103,8 @@ JWT를 사용하는 경우에만 `backend/src/main/resources/application.yml` �
 
 ```yaml
 onlyoffice:
-  url: http://localhost:80
-  secret: YOUR_GENERATED_SECRET  # JWT 사용 시 1단계에서 생성한 값
+  url: http://localhost:9980
+  secret: your-secret-key-must-be-at-least-32-characters-long-for-hs256 # docker-compose.yml에 설정된 값과 일치해야 함
 ```
 
 JWT를 사용하지 않는 경우 기본 설정 그대로 사용하면 됩니다.
@@ -203,7 +200,7 @@ server:
 
 # ONLYOFFICE Document Server 설정
 onlyoffice:
-  url: http://localhost:80
+  url: http://localhost:9980
   secret: your-secret-key-must-be-at-least-32-characters-long-for-hs256
 
 # 파일 저장소 설정
@@ -242,23 +239,12 @@ export default defineConfig({
 ## 보안
 
 ### 현재 보안 상태
-- ⚠️ **JWT 미적용**: 데모 편의를 위해 JWT 없이 실행
-- JWT 생성 로직은 구현되어 있으나 실제로 사용되지 않음
+- ✅ **JWT 적용됨**: `docker-compose.yml`을 통해 JWT가 활성화되어 실행됩니다.
+- **Secret Key**: `your-secret-key-must-be-at-least-32-characters-long-for-hs256` (데모용 기본값)
 
 ### JWT 활성화 방법 (프로덕션 권장)
-1. ONLYOFFICE Document Server 실행 시 JWT 활성화:
-   ```bash
-   docker run -d -p 80:80 \
-     -e JWT_ENABLED=true \
-     -e JWT_SECRET=YOUR_SECRET \
-     onlyoffice/documentserver
-   ```
-
-2. Backend `application.yml`에 동일한 시크릿 설정:
-   ```yaml
-   onlyoffice:
-     secret: YOUR_SECRET
-   ```
+1. `docker-compose.yml`의 `JWT_SECRET` 환경 변수 변경
+2. Backend `application.yml`의 `onlyoffice.secret` 변경
 
 3. JWT 사양:
    - **알고리즘**: HS256 (HMAC with SHA-256)
@@ -284,7 +270,7 @@ export default defineConfig({
 
 2. ONLYOFFICE 웰컴 페이지 접속:
    ```
-   http://localhost:80/welcome/
+   http://localhost:9980/welcome/
    ```
 
 3. Backend 로그에서 에러 확인
