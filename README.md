@@ -18,22 +18,21 @@ onlyoffice-demo/
 │   │       └── JwtManager.java          # JWT 토큰 생성/검증
 │   ├── src/main/resources/
 │   │   └── application.yml              # 애플리케이션 설정
+│   ├── storage/                         # 로컬 문서 저장소 (임시)
+│   │   ├── sample.docx
+│   │   ├── sample.xlsx
+│   │   ├── sample.pptx
+│   │   └── sample.pdf
 │   └── build.gradle                     # Gradle 빌드 설정
 │
-├── frontend/                             # React 프론트엔드
-│   ├── src/
-│   │   ├── components/
-│   │   │   └── Editor.tsx               # ONLYOFFICE 에디터 컴포넌트
-│   │   ├── App.tsx                      # 메인 앱
-│   │   └── main.tsx                     # 엔트리 포인트
-│   ├── vite.config.ts                   # Vite 설정 (API 프록시)
-│   └── package.json
-│
-└── storage/                              # 로컬 문서 저장소 (임시)
-    ├── sample.docx
-    ├── sample.xlsx
-    ├── sample.pptx
-    └── sample.pdf
+└── frontend/                             # React 프론트엔드
+    ├── src/
+    │   ├── components/
+    │   │   └── Editor.tsx               # ONLYOFFICE 에디터 컴포넌트
+    │   ├── App.tsx                      # 메인 앱
+    │   └── main.tsx                     # 엔트리 포인트
+    ├── vite.config.ts                   # Vite 설정 (API 프록시)
+    └── package.json
 ```
 
 ## 주요 기능
@@ -218,7 +217,7 @@ storage:
 
 - `onlyoffice.secret`: JWT 서명에 사용할 비밀키 (최소 32자)
 
-- `storage.path`: 문서 파일이 저장된 디렉터리 경로 (프로젝트 루트 기준 상대 경로)
+- `storage.path`: 문서 파일이 저장된 디렉터리 경로 (backend 디렉터리 기준 상대 경로, `storage`는 `backend/storage/`를 의미)
 
 ### Frontend: vite.config.ts
 
@@ -277,20 +276,20 @@ export default defineConfig({
 
 ### 파일을 찾을 수 없음 (404)
 
-1. `storage/` 폴더에 파일이 있는지 확인:
+1. `backend/storage/` 폴더에 파일이 있는지 확인:
    ```bash
-   ls storage/
+   ls backend/storage/
    ```
 
 2. `application.yml`의 `storage.path` 설정 확인:
    ```yaml
    storage:
-     path: storage
+     path: storage  # backend 디렉터리 기준 상대 경로
    ```
 
 3. Backend 시작 시 로그 확인:
    ```
-   Storage directory initialized at: /path/to/onlyoffice-demo/storage
+   Storage directory initialized at: /path/to/onlyoffice-demo/backend/storage
    ```
 
 ### 콜백 저장 실패
@@ -307,7 +306,7 @@ export default defineConfig({
 ## 개발 노트
 
 ### 파일 저장소 구조
-- **파일 위치**: `storage/` (프로젝트 루트)
+- **파일 위치**: `backend/storage/` (backend 디렉터리 내부)
 - **저장 방식**: 파일시스템 직접 접근 (상대 경로)
 - **편집 파일**: 동일 디렉터리에 저장 (덮어쓰기)
 

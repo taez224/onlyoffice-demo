@@ -4,6 +4,7 @@
 # Gradle
 .gradle/
 build/
+bin/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
@@ -29,6 +30,10 @@ pnpm-lock.yaml
 *.ipr
 .DS_Store
 
+# AI tools
+.claude/
+.serena/
+
 # ========================================
 # Application Specific
 # ========================================
@@ -37,7 +42,7 @@ backend/*.log
 backend/backend.log
 
 # Working storage directory (edited files)
-# storage/
+backend/storage/
 
 # ========================================
 # Build artifacts
@@ -51,7 +56,6 @@ target/
 # ========================================
 # OS
 # ========================================
-.DS_Store
 Thumbs.db
 
 # ========================================
