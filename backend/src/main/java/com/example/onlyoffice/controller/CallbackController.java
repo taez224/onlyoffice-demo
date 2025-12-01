@@ -25,12 +25,13 @@ public class CallbackController {
 
     @PostMapping("/callback")
     public Map<String, Object> callback(HttpServletRequest request, @RequestBody String body) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("error", 0);
 
         try {
-            // In a real app, you should validate the JWT token here
-            // String authHeader = request.getHeader("Authorization");
+            String authHeader = request.getHeader("Authorization");
+            if (!jwtManager.validateToken(authHeader)) {
+                log.error("Invalid JWT token");
+                return Map.of("error", 1);
+            }
 
             Map<String, Object> callbackData = objectMapper.readValue(body, Map.class);
             int status = (int) callbackData.get("status");
@@ -77,14 +78,14 @@ public class CallbackController {
                     documentService.saveFile(fileName, in);
                 } catch (Exception e) {
                     log.error("Error downloading file", e);
-                    response.put("error", 1);
+                    return Map.of("error", 1);
                 }
             }
         } catch (Exception e) {
             log.error("Error processing callback", e);
-            response.put("error", 1);
+            return Map.of("error", 1);
         }
 
-        return response;
+        return Map.of("error", 0);
     }
 }
