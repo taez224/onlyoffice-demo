@@ -4,23 +4,25 @@
 ## 📄 문서 정보
 
 - **작성일**: 2025-12-02
-- **버전**: 2.1 (PM 토론 반영 버전)
+- **버전**: 2.2 (최신 의존성 반영)
 - **대상 시스템**: ONLYOFFICE Document Editor Integration Demo v2
 - **작성자**: Product Team (after PM Debate)
-- **변경 이력**: v1.0 → v2.0 (보안 강화, 프로덕션 준비도 향상)
+- **변경 이력**: v1.0 → v2.0 (보안 강화, 프로덕션 준비도 향상) → v2.2 (의존성 최신화)
 
 ---
 
-## 🎯 v2.0 핵심 변경사항 요약
+## 🎯 v2.2 핵심 변경사항 요약
 
-| 구분 | v1.0 | v2.0 | 이유 |
-|------|------|------|------|
-| **Object Storage** | S3 Ninja | **MinIO** | 프로덕션 준비도 |
-| **JWT 검증** | 3편 연기 | **2편 필수** | 보안 취약점 |
-| **파일 검증** | 확장자만 | **매직 바이트 + MIME** | 업로드 우회 방지 |
-| **Router** | TanStack Router | **Next.js App Router** | SSR 호환성 |
-| **트랜잭션** | JPA만 | **Saga 패턴** | 분산 시스템 원자성 |
-| **일정** | 2주 | **3주** | 보안 작업 추가 |
+| 구분 | v1.0 | v2.0 | v2.2 | 이유 |
+|------|------|------|------|------|
+| **Spring Boot** | - | 3.3.0 | **3.5.8** | 최신 안정화 |
+| **Java** | - | 21 | **21** | LTS 버전 |
+| **Object Storage** | S3 Ninja | MinIO 2.39.1 | **MinIO 8.6.0** | 프로덕션 준비도 |
+| **JWT** | JJWT 0.11.5 | java-jwt 4.4.0 | **jjwt 0.13.0** | 단순화 & 최신화 |
+| **File Validation** | 확장자만 | Tika 2.9.1 | **Tika 3.2.3** | 매직 바이트 검증 |
+| **ONLYOFFICE SDK** | - | 1.5.0 | **1.7.0** | 최신 기능 |
+| **Router** | TanStack Router | **Next.js App Router** | **Next.js App Router** | SSR 호환성 |
+| **트랜잭션** | JPA만 | **Saga 패턴** | **Saga 패턴** | 분산 시스템 원자성 |
 
 ---
 
@@ -515,18 +517,18 @@ documents/                              # Bucket
 
 ## 8. Technology Stack
 
-### 8.1 Backend (v2.0 변경)
+### 8.1 Backend (v2.2 최신화)
 
 | Layer | Technology | Version | v1.0 대비 변경 |
 |-------|-----------|---------|----|
-| Framework | Spring Boot | 3.2.x | 동일 |
-| Language | Java | 17 | 동일 |
-| ORM | Spring Data JPA | 3.2.x | 동일 |
+| Framework | Spring Boot | 3.5.8 | 동일 |
+| Language | Java | 21 | 동일 |
+| ORM | Spring Data JPA | 3.5.8 | 동일 |
 | Database | PostgreSQL | 16 | 동일 |
-| Object Storage | **MinIO** (AWS S3 SDK v2) | 2.39.1 | **변경** |
-| ONLYOFFICE SDK | docs-integration-sdk-java | **1.5.0** | 1.0.0→1.5.0 |
-| **JWT** | **java-jwt** | **4.4.0** | **신규** |
-| **File Validation** | **Apache Tika** | **2.9.1** | **신규** |
+| Object Storage | **MinIO** (AWS S3 SDK v2) | **8.6.0** | **변경** |
+| ONLYOFFICE SDK | docs-integration-sdk | **1.7.0** | 1.0.0→1.7.0 |
+| **JWT** | **jjwt** | **0.13.0** | **신규** |
+| **File Validation** | **Apache Tika** | **3.2.3** | **신규** |
 | **Monitoring** | **Spring Boot Actuator** | **3.2.x** | **신규** |
 | **Metrics** | **Micrometer** | **1.12.x** | **신규** |
 
@@ -545,13 +547,13 @@ documents/                              # Bucket
 
 **중요**: ~~TanStack Router 제거~~ (Next.js와 충돌)
 
-### 8.3 Infrastructure (v2.0 변경)
+### 8.3 Infrastructure (v2.2 최신화)
 
 | Service | Technology | Port | v1.0 대비 변경 |
 |---------|-----------|------|----|
-| ONLYOFFICE Docs | onlyoffice/documentserver | 8000 | 볼륨 추가 |
+| ONLYOFFICE Docs | onlyoffice/documentserver:latest | 9980 | 볼륨 추가 |
 | PostgreSQL | postgres:16 | 5432 | 볼륨 추가 |
-| **MinIO** | **minio/minio:latest** | **9000/9001** | **신규** (~~S3 Ninja~~) |
+| **MinIO** | **minio/minio:8.6.0** | **9000/9001** | **신규** (~~S3 Ninja~~) |
 | Backend | Spring Boot | 8080 | 동일 |
 | Frontend | Next.js Dev Server | 3000 | 동일 |
 

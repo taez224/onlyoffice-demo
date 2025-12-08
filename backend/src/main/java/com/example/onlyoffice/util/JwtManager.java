@@ -20,7 +20,7 @@ public class JwtManager {
         SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
 
         return Jwts.builder()
-                .setClaims(payloadClaims)
+                .claims(payloadClaims)
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -31,7 +31,7 @@ public class JwtManager {
         }
         try {
             SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-            Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token);
+            Jwts.parser().verifyWith(key).build().parseSignedClaims(token);
             return true;
         } catch (Exception e) {
             return false;
