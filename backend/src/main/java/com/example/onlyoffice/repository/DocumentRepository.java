@@ -114,7 +114,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
      * @param deletedAt 삭제 시각
      * @return 업데이트된 행 수 (0 또는 1)
      */
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE Document d SET d.deletedAt = :deletedAt, d.status = 'DELETED' WHERE d.id = :id AND d.deletedAt IS NULL")
     int softDelete(@Param("id") Long id, @Param("deletedAt") LocalDateTime deletedAt);
 
@@ -124,7 +124,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
      * @param id 문서 ID
      * @return 업데이트된 행 수 (0 또는 1)
      */
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE Document d SET d.deletedAt = NULL, d.status = 'ACTIVE' WHERE d.id = :id AND d.deletedAt IS NOT NULL")
     int restore(@Param("id") Long id);
 
