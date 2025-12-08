@@ -3,12 +3,25 @@
 server:
   baseUrl: http://host.docker.internal:8080
 
+# Database configuration
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:onlyoffice}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
 # ONLYOFFICE Document Server Settings
-# Replace with your actual Document Server URL
 onlyoffice:
-  url: http://localhost:9980
-  # The secret key must match the one in ONLYOFFICE Document Server config (local.json or env var)
-  secret: your-secret-key-must-be-at-least-32-characters-long-for-hs256
+  url: ${ONLYOFFICE_URL:http://localhost:9980}
+  # JWT secret - must match docker-compose JWT_SECRET and be at least 32 characters
+  secret: ${JWT_SECRET:your-secret-key-must-be-at-least-32-characters-long}
 
 # Storage configuration
 storage:
