@@ -70,6 +70,9 @@ Thumbs.db
 # ========================================
 # Environment & Secrets
 # ========================================
+.env
 .env.local
 .env.*.local
 onlyoffice_data/
+postgres_data/
+minio_data/

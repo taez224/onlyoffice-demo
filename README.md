@@ -42,10 +42,10 @@ onlyoffice-demo/
 - ONLYOFFICE Document Server를 통한 브라우저 기반 편집
 - 실시간 협업 편집 가능
 
-### 2. JWT 기반 보안 (현재 미적용)
-- JWT 생성 로직은 구현되어 있으나 실제로는 사용되지 않음
-- ONLYOFFICE Document Server가 JWT 검증 없이 실행 중 (`JWT_ENABLED=false`)
-- 추후 JWT 적용 예정
+### 2. JWT 기반 보안 (활성화됨)
+- JWT 생성 로직이 구현되어 있고 활성화됨
+- ONLYOFFICE Document Server가 JWT를 검증하도록 설정됨 (`JWT_ENABLED=true`)
+- `.env` 파일에서 JWT Secret을 관리
 
 ### 3. 자동 저장
 - 편집 완료 시 ONLYOFFICE에서 콜백 호출
@@ -77,36 +77,80 @@ onlyoffice-demo/
 
 ## 빠른 시작
 
-### 1단계: JWT Secret 생성
+### 1단계: 환경 변수 설정
+
+`.env.example` 파일을 복사하여 `.env` 파일을 생성합니다:
 
 ```bash
-openssl rand -hex 32
+cp .env.example .env
 ```
 
-출력된 64자리 16진수 문자열을 복사합니다.
+생성된 `.env` 파일을 편집하여 다음 항목을 설정합니다:
 
-### 2단계: ONLYOFFICE Document Server 실행
+```env
+# PostgreSQL
+POSTGRES_DB=onlyoffice_demo
+POSTGRES_USER=demo
+POSTGRES_PASSWORD=your-secure-password-here  # 안전한 비밀번호로 변경
 
-프로젝트 루트에 포함된 `docker-compose.yml`을 사용하여 실행하는 것을 권장합니다.
-이 설정에는 **JWT가 이미 활성화**되어 있으며, 데이터 보존을 위한 볼륨 설정도 포함되어 있습니다.
+# MinIO
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=your-minio-password-here  # 안전한 비밀번호로 변경
+
+# ONLYOFFICE JWT Secret (최소 32자)
+JWT_SECRET=your-secret-key-must-be-at-least-32-characters-long-for-hs256  # 강력한 비밀키로 변경
+```
+
+강력한 비밀번호와 JWT Secret을 생성하려면:
+
+```bash
+# JWT Secret 생성 (64자리 16진수)
+openssl rand -hex 32
+
+# 또는 무작위 비밀번호 생성
+openssl rand -base64 16
+```
+
+### 2단계: ONLYOFFICE Document Server 및 인프라 실행
+
+프로젝트 루트에 포함된 `docker-compose.yml`을 사용하여 PostgreSQL, MinIO, ONLYOFFICE를 한 번에 실행할 수 있습니다.
 
 ```bash
 docker-compose up -d
 ```
 
-실행이 완료되면 `http://localhost:9980/welcome/`에 접속하여 서버가 정상 작동하는지 확인할 수 있습니다.
+모든 서비스가 정상적으로 시작되었는지 확인합니다:
 
-### 3단계: Backend 설정 (선택 사항)
+```bash
+docker ps
+```
 
-JWT를 사용하는 경우에만 `backend/src/main/resources/application.yml` 파일을 수정합니다:
+다음 URL들에 접속하여 서비스 상태를 확인합니다:
+- ONLYOFFICE: `http://localhost:9980/welcome/`
+- MinIO Console: `http://localhost:9001` (User: minioadmin, Password: `.env`에 설정한 비밀번호)
+- PostgreSQL: 터미널에서 다음 명령어 실행
+
+```bash
+docker-compose exec postgres psql -U demo -d onlyoffice_demo -c "SELECT 1"
+```
+
+### 3단계: Backend 설정
+
+`backend/src/main/resources/application.yml` 파일을 확인하여 JWT Secret이 `.env` 파일과 일치하는지 확인합니다:
 
 ```yaml
 onlyoffice:
   url: http://localhost:9980
-  secret: your-secret-key-must-be-at-least-32-characters-long-for-hs256 # docker-compose.yml에 설정된 값과 일치해야 함
+  secret: your-secret-key-must-be-at-least-32-characters-long-for-hs256 # .env 파일의 JWT_SECRET 값과 일치해야 함
 ```
 
-JWT를 사용하지 않는 경우 기본 설정 그대로 사용하면 됩니다.
+**중요**: Docker 환경에서 ONLYOFFICE가 Backend 콜백을 호출할 때 사용하는 URL:
+```yaml
+server:
+  baseUrl: http://host.docker.internal:8080  # Docker 환경용
+  # 또는
+  # baseUrl: http://localhost:8080  # 로컬 개발용
+```
 
 ### 4단계: Backend 실행
 
@@ -239,11 +283,11 @@ export default defineConfig({
 
 ### 현재 보안 상태
 - ✅ **JWT 적용됨**: `docker-compose.yml`을 통해 JWT가 활성화되어 실행됩니다.
-- **Secret Key**: `your-secret-key-must-be-at-least-32-characters-long-for-hs256` (데모용 기본값)
+- **Secret Key 관리**: `.env` 파일에서 `JWT_SECRET` 환경 변수로 관리됩니다.
 
-### JWT 활성화 방법 (프로덕션 권장)
-1. `docker-compose.yml`의 `JWT_SECRET` 환경 변수 변경
-2. Backend `application.yml`의 `onlyoffice.secret` 변경
+### JWT Secret 관리 (필수)
+1. `.env` 파일에서 `JWT_SECRET` 값 설정 (최소 32자)
+2. Backend `application.yml`의 `onlyoffice.secret`이 `.env`의 `JWT_SECRET` 값과 일치하도록 설정
 
 3. JWT 사양:
    - **알고리즘**: HS256 (HMAC with SHA-256)
