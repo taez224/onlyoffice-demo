@@ -22,6 +22,16 @@ import java.util.Optional;
 @Repository
 public interface DocumentRepository extends JpaRepository<Document, Long> {
 
+
+    /**
+     * 파일명으로 문서 조회 (soft delete된 문서 제외)
+     * EditorController에서 에디터 설정 생성 시 사용
+     *
+     * @param fileName 파일명
+     * @return 문서가 존재하고 삭제되지 않았으면 해당 문서를 포함한 Optional
+     */
+    Optional<Document> findByFileNameAndDeletedAtIsNull(String fileName);
+
     // ==================== 기본 조회 메서드 ====================
 
     /**

@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
     name = "documents",
     indexes = {
         @Index(name = "idx_file_key", columnList = "file_key"),
+        @Index(name = "idx_file_name", columnList = "file_name"),
         @Index(name = "idx_created_at", columnList = "created_at"),
         @Index(name = "idx_status", columnList = "status"),
         @Index(name = "idx_deleted_at", columnList = "deleted_at")
@@ -41,11 +42,21 @@ public class Document {
     private String fileName;
 
     /**
-     * ONLYOFFICE 문서 키 (불변, 편집 세션에서 사용)
+     * ONLYOFFICE referenceData용 파일 식별자 (불변)
      * 문서 생성 시 한 번 생성되며 변경되지 않음
+     * 외부 데이터 참조, 파일 링크 등에 사용
      */
     @Column(name = "file_key", nullable = false, unique = true, length = 255)
     private String fileKey;
+
+    /**
+     * ONLYOFFICE 편집 세션 버전 (가변)
+     * 문서가 편집되고 저장될 때마다 증가
+     * document.key 생성에 사용: fileKey + "_v" + editorVersion
+     */
+    @Column(name = "editor_version", nullable = false)
+    @Builder.Default
+    private Integer editorVersion = 0;
 
     /**
      * 파일 확장자 (예: docx, xlsx, pptx, pdf)
@@ -117,4 +128,22 @@ public class Document {
     @Column(name = "created_by", nullable = false, length = 100)
     @Builder.Default
     private String createdBy = "anonymous";
+
+    /**
+     * ONLYOFFICE document.key 생성
+     * 편집 세션 식별에 사용되며, 저장 후에는 editorVersion이 증가하여 새 key가 생성됨
+     * 
+     * @return fileKey + "_v" + editorVersion 형식의 편집 세션 key
+     */
+    public String getEditorKey() {
+        return fileKey + "_v" + editorVersion;
+    }
+
+    /**
+     * 편집 세션 버전 증가
+     * 문서가 성공적으로 저장된 후 호출하여 다음 편집 세션을 위한 새 key 생성
+     */
+    public void incrementEditorVersion() {
+        this.editorVersion++;
+    }
 }
