@@ -94,62 +94,99 @@ ONLYOFFICE (Port 9980) → Callback (JWT 서명)
 
 ## 💻 Part 1: Infrastructure Setup
 
+### .env 파일 생성 (중요!)
+
+먼저 환경변수 파일을 생성합니다:
+
+```bash
+cp .env.example .env
+```
+
+`.env` 파일을 열어서 비밀번호와 JWT Secret을 변경하세요:
+
+```env
+# PostgreSQL Configuration
+POSTGRES_DB=onlyoffice_demo
+POSTGRES_USER=demo
+POSTGRES_PASSWORD=your-secure-password-here  # 변경 필요!
+
+# MinIO Configuration
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=your-minio-password-here  # 변경 필요!
+
+# ONLYOFFICE JWT Secret (must be at least 32 characters)
+JWT_SECRET=your-secret-key-must-be-at-least-32-characters-long-for-hs256  # 변경 필요!
+```
+
 ### docker-compose.yml
 
 ```yaml
-version: '3.8'
-
 services:
-  # PostgreSQL - 문서 메타데이터
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
+    container_name: onlyoffice-postgres
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: onlyoffice_demo
-      POSTGRES_USER: demo
-      POSTGRES_PASSWORD: demo123
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U demo"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: always
+    networks:
+      - onlyoffice-net
 
-  # MinIO - S3 호환 파일 저장소
   minio:
     image: minio/minio:latest
+    container_name: onlyoffice-minio
     ports:
       - "9000:9000"   # API
       - "9001:9001"   # Console
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     volumes:
-      - minio_data:/data
+      - ./minio_data:/data
+    command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - onlyoffice-net
 
-  # ONLYOFFICE Document Server
-  onlyoffice:
-    image: onlyoffice/documentserver:latest
+  onlyoffice-docs:
+    image: onlyoffice/documentserver:9.1
+    container_name: onlyoffice-docs
     ports:
       - "9980:80"
     environment:
       - JWT_ENABLED=true
-      - JWT_SECRET=your-secret-key-min-32-characters-xxxxxxxxxxxx
+      - JWT_SECRET=${JWT_SECRET}
     volumes:
-      - onlyoffice_data:/var/www/onlyoffice/Data
+      - ./onlyoffice_data/logs:/var/log/onlyoffice
+      - ./onlyoffice_data/data:/var/www/onlyoffice/Data
+      - ./onlyoffice_data/lib:/var/lib/onlyoffice
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/welcome/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - onlyoffice-net
 
-volumes:
-  postgres_data:
-  minio_data:
-  onlyoffice_data:
+networks:
+  onlyoffice-net:
+    driver: bridge
 ```
 
 ### 실행 및 확인
@@ -175,6 +212,12 @@ open http://localhost:9001
 ### build.gradle
 
 ```gradle
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.8'
+    id 'io.spring.dependency-management' version '1.1.5'
+}
+
 dependencies {
     // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -183,47 +226,70 @@ dependencies {
     // PostgreSQL
     runtimeOnly 'org.postgresql:postgresql'
 
-    // ONLYOFFICE SDK (중요!)
-    implementation 'com.onlyoffice:docs-integration-sdk-java:1.5.0'
+    // ONLYOFFICE SDK
+    implementation 'com.onlyoffice:docs-integration-sdk:1.7.0'
 
-    // JWT
-    implementation 'com.auth0:java-jwt:4.4.0'
+    // JWT (jjwt 0.13.0)
+    implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
 
-    // MinIO (AWS S3 SDK)
-    implementation 'io.minio:minio:8.5.7'
+    // File Validation
+    implementation 'org.apache.tika:tika-core:3.2.3'
+
+    // MinIO
+    implementation 'io.minio:minio:8.6.0'
+
+    // Monitoring
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-core'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
 }
 ```
 
 ### application.yml
 
 ```yaml
+# Server configuration (base URL for backend)
+server:
+  baseUrl: http://host.docker.internal:8080
+
+# Database configuration (환경변수 사용)
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/onlyoffice_demo
-    username: demo
-    password: demo123
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:onlyoffice_demo}
+    username: ${DB_USER:demo}
+    password: ${DB_PASSWORD:demo123}
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
-server:
-  port: 8080
-  # ONLYOFFICE Callback용 (Docker에서 접근 가능한 주소)
-  baseUrl: http://host.docker.internal:8080
-
-# MinIO 설정
-minio:
-  endpoint: http://localhost:9000
-  access-key: minioadmin
-  secret-key: minioadmin
-  bucket: documents
-
-# ONLYOFFICE 설정
+# ONLYOFFICE Document Server Settings
 onlyoffice:
-  url: http://localhost:9980
-  secret: your-secret-key-min-32-characters-xxxxxxxxxxxx  # docker-compose.yml과 동일
+  url: ${ONLYOFFICE_URL:http://localhost:9980}
+  # JWT secret - must match docker-compose JWT_SECRET (from .env)
+  secret: ${JWT_SECRET:your-secret-key-must-be-at-least-32-characters-long}
+
+# Storage configuration
+storage:
+  path: storage
+
+# MinIO 설정 (3편에서 추가 예정)
+# minio:
+#   endpoint: http://localhost:9000
+#   access-key: minioadmin
+#   secret-key: minioadmin
+#   bucket: documents
 ```
+
+> **참고**: 현재는 로컬 파일 시스템(`backend/storage/`)을 사용합니다. MinIO는 3편에서 완전히 통합됩니다.
 
 ### Document Entity
 
@@ -335,26 +401,52 @@ public class MinioService {
 }
 ```
 
-### ONLYOFFICE SDK Configuration
+### JWT Manager (jjwt 0.13.0 사용)
 
 ```java
-@Configuration
-public class OnlyOfficeConfig {
+package com.example.onlyoffice.util;
+
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
+@Component
+public class JwtManager {
 
     @Value("${onlyoffice.secret}")
-    private String jwtSecret;
+    private String secret;
 
-    @Bean
-    public JwtManager jwtManager() {
-        return new JwtManager(jwtSecret);
+    public String createToken(Map<String, Object> payloadClaims) {
+        SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+
+        return Jwts.builder()
+                .claims(payloadClaims)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
     }
 
-    @Bean
-    public DocumentManager documentManager() {
-        return new DocumentManager();
+    public boolean validateToken(String token) {
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);
+        }
+        try {
+            SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+            Jwts.parser().verifyWith(key).build().parseSignedClaims(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
 ```
+
+> **변경사항**: `java-jwt` → `jjwt 0.13.0`으로 변경 (Spring 생태계에서 널리 사용)
 
 ### Editor Config Service
 
@@ -522,9 +614,8 @@ public class CallbackController {
         @RequestBody CallbackRequest request,
         @RequestHeader("Authorization") String authHeader
     ) {
-        // 1. JWT 검증
-        String token = authHeader.replace("Bearer ", "");
-        if (!jwtManager.verify(token)) {
+        // 1. JWT 검증 (jjwt 0.13.0)
+        if (!jwtManager.validateToken(authHeader)) {
             return Map.of("error", 1);  // 실패
         }
 
@@ -879,11 +970,39 @@ public Map<String, Integer> handleCallback(...) {
 
 ### 2편에서 배운 것
 
-1. **MinIO**: S3 호환 스토리지로 파일 영구 저장
-2. **ONLYOFFICE SDK**: Config JSON 자동 생성 (수동 작성 탈피)
-3. **PostgreSQL**: 문서 메타데이터 DB 관리
-4. **JWT**: Callback 기본 보안
-5. **Next.js + TanStack Query**: 서버 상태 관리
+1. **환경변수 관리**: `.env` 파일로 민감한 정보 분리
+2. **Docker Compose**: PostgreSQL + MinIO + ONLYOFFICE 통합 환경
+3. **최신 의존성**: Spring Boot 3.5.8, jjwt 0.13.0, ONLYOFFICE SDK 1.7.0
+4. **JWT 인증**: jjwt 라이브러리로 Callback 보안
+5. **PostgreSQL**: 문서 메타데이터 영구 저장 준비
+6. **MinIO**: S3 호환 스토리지 인프라 준비 (3편에서 완전 통합)
+
+### 실제 구현과 초안의 차이점
+
+| 항목 | 초안 (Draft) | 실제 구현 |
+|------|-------------|----------|
+| Spring Boot | 3.3.0 | **3.5.8** |
+| JWT 라이브러리 | java-jwt 4.4.0 | **jjwt 0.13.0** |
+| ONLYOFFICE SDK | 1.5.0 | **1.7.0** |
+| MinIO | 8.5.7 | **8.6.0** |
+| Apache Tika | 2.9.1 | **3.2.3** |
+| 환경변수 관리 | 하드코딩 | **.env 파일 + 환경변수** |
+| 파일 저장소 | 즉시 MinIO | **로컬 → MinIO (단계별)** |
+
+### 현재 시스템 상태
+
+✅ **완료된 것**:
+- Docker 기반 인프라 (PostgreSQL, MinIO, ONLYOFFICE)
+- 환경변수 기반 설정 관리
+- JWT 인증 구현 (jjwt)
+- 로컬 파일 시스템 기반 동작 확인
+
+🔄 **3편에서 추가될 것**:
+- MinIO 완전 통합 (현재는 컨테이너만 준비)
+- ONLYOFFICE SDK로 Config 자동 생성
+- Next.js UI 구현
+- 보안 강화 (Apache Tika 파일 검증)
+- Saga 패턴 트랜잭션 관리
 
 ### 다음 글 (3편 예고)
 
