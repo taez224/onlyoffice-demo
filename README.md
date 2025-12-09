@@ -372,6 +372,10 @@ PDF 파일은 자동으로 `edit: false`로 설정되어 읽기 전용 모드로
 - Community Edition: AGPLv3
 - Enterprise Edition: 상용 라이선스
 
+## 문서
+
+- [OnlyOffice 통합 가이드](docs/onlyoffice-integration-guide.md) - document.key 관리, callback 처리 등 기술 상세
+
 ## 참고 자료
 
 - [ONLYOFFICE API Documentation](https://api.onlyoffice.com/editors/basic)

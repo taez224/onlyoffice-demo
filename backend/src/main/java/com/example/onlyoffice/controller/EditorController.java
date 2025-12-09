@@ -3,17 +3,18 @@ package com.example.onlyoffice.controller;
 import com.example.onlyoffice.service.DocumentService;
 import com.example.onlyoffice.util.JwtManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
 @Controller
 @RequiredArgsConstructor
+@Slf4j
 public class EditorController {
 
     private final DocumentService documentService;
@@ -25,11 +26,12 @@ public class EditorController {
     @GetMapping("/api/config")
     @org.springframework.web.bind.annotation.ResponseBody
     public Map<String, Object> getEditorConfig(@RequestParam("fileName") String fileName) {
-        File file = documentService.getFile(fileName);
-
         String serverUrl = documentService.getServerUrl();
         String fileExtension = getFileExtension(fileName);
         String documentType = getDocumentType(fileExtension);
+
+        // Service를 통해 editorKey 생성
+        String editorKey = documentService.getEditorKey(fileName);
 
         Map<String, Object> config = new HashMap<>();
         config.put("documentType", documentType);
@@ -39,7 +41,7 @@ public class EditorController {
         document.put("title", fileName);
         document.put("url", serverUrl + "/files/" + fileName);
         document.put("fileType", fileExtension);
-        document.put("key", fileName + "_" + file.lastModified());
+        document.put("key", editorKey);
 
         Map<String, Object> permissions = new HashMap<>();
         permissions.put("edit", true);
@@ -66,6 +68,7 @@ public class EditorController {
         response.put("config", config);
         response.put("documentServerUrl", onlyofficeUrl);
 
+        log.info("Editor config generated for file: {}, key: {}", fileName, editorKey);
         return response;
     }
 
