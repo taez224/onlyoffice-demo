@@ -1,6 +1,6 @@
 package com.example.onlyoffice.controller;
 
-import com.example.onlyoffice.service.ConfigService;
+import com.example.onlyoffice.service.EditorConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -12,6 +12,7 @@ import java.util.Map;
 
 /**
  * ONLYOFFICE 에디터 설정 컨트롤러
+ * - ONLYOFFICE SDK를 사용하여 Type-safe Config 생성
  * - 에디터 Config JSON 반환
  */
 @Controller
@@ -19,7 +20,7 @@ import java.util.Map;
 @Slf4j
 public class EditorController {
 
-    private final ConfigService configService;
+    private final EditorConfigService editorConfigService;
 
     /**
      * ONLYOFFICE 에디터 설정 반환
@@ -31,6 +32,6 @@ public class EditorController {
     @ResponseBody
     public Map<String, Object> getEditorConfig(@RequestParam("fileName") String fileName) {
         log.info("Editor config requested for file: {}", fileName);
-        return configService.createEditorResponse(fileName);
+        return editorConfigService.createEditorResponse(fileName);
     }
 }
