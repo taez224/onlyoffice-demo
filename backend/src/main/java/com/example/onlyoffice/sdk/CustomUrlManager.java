@@ -1,7 +1,7 @@
 package com.example.onlyoffice.sdk;
 
-import com.onlyoffice.manager.url.UrlManager;
-import com.onlyoffice.model.common.RequestedService;
+import com.onlyoffice.manager.settings.SettingsManager;
+import com.onlyoffice.manager.url.DefaultUrlManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -9,47 +9,30 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Custom implementation of ONLYOFFICE UrlManager
- * Provides URLs for document server, callbacks, and file operations
+ * Extends DefaultUrlManager to leverage SDK's URL management features
+ *
+ * Overrides required methods for application-specific URLs:
+ * - getFileUrl(): Returns file download URL using Spring's UriComponentsBuilder
+ * - getCallbackUrl(): Returns callback URL with fileName parameter
+ * - getGobackUrl(): Returns redirect URL after editing
+ * - getCreateUrl(): Not implemented (returns null)
+ *
+ * Inherited features from DefaultUrlManager:
+ * - getDocumentServerUrl(): Loads from SettingsManager
+ * - getInnerDocumentServerUrl(): Supports Docker internal URLs
+ * - getDocumentServerApiUrl(): Constructs API endpoint URLs
+ * - getServiceUrl(): Reflection-based service URL lookup
+ * - sanitizeUrl(), replaceToDocumentServerUrl(): URL manipulation utilities
  */
 @Slf4j
 @Component
-public class CustomUrlManager implements UrlManager {
-
-    @Value("${onlyoffice.url}")
-    private String documentServerUrl;
+public class CustomUrlManager extends DefaultUrlManager {
 
     @Value("${server.baseUrl}")
     private String serverBaseUrl;
 
-    @Override
-    public String getDocumentServerUrl() {
-        return sanitizeUrl(documentServerUrl);
-    }
-
-    @Override
-    public String getInnerDocumentServerUrl() {
-        // No internal URL in our setup
-        return getDocumentServerUrl();
-    }
-
-    @Override
-    public String getDocumentServerApiUrl() {
-        return getDocumentServerUrl() + "/web-apps/apps/api/documents/api.js";
-    }
-
-    @Override
-    public String getDocumentServerApiUrl(String shardKey) {
-        if (shardKey == null || shardKey.isBlank()) {
-            return getDocumentServerApiUrl();
-        }
-        return UriComponentsBuilder.fromHttpUrl(getDocumentServerApiUrl())
-                .queryParam("shardkey", shardKey)
-                .toUriString();
-    }
-
-    @Override
-    public String getDocumentServerPreloaderApiUrl() {
-        return getDocumentServerUrl() + "/web-apps/apps/api/documents/cache-scripts.html";
+    public CustomUrlManager(SettingsManager settingsManager) {
+        super(settingsManager);
     }
 
     @Override
@@ -78,37 +61,5 @@ public class CustomUrlManager implements UrlManager {
     public String getCreateUrl(String fileId) {
         // Not implemented - return null
         return null;
-    }
-
-    @Override
-    public String getServiceUrl(RequestedService requestedService) {
-        // Not implemented - delegate to SDK
-        return null;
-    }
-
-    @Override
-    public String sanitizeUrl(String url) {
-        if (url == null || url.isBlank()) {
-            return url;
-        }
-        // Remove trailing slash
-        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
-    }
-
-    @Override
-    public String replaceToDocumentServerUrl(String url) {
-        // No replacement needed in our setup
-        return url;
-    }
-
-    @Override
-    public String replaceToInnerDocumentServerUrl(String url) {
-        // No replacement needed in our setup
-        return url;
-    }
-
-    @Override
-    public String getTestConvertUrl(String url) {
-        return sanitizeUrl(url) + "/test.docx";
     }
 }
