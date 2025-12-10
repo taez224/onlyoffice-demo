@@ -28,6 +28,12 @@ import java.util.zip.ZipInputStream;
  * - MIME 타입 검증
  * - 매직 바이트 검증
  * - 압축 폭탄 방어
+ *
+ * <p><b>Integration Note:</b>
+ * This service is ready to be integrated into a future file upload API.
+ * Expected integration point: DocumentUploadController or similar REST endpoint
+ * that accepts MultipartFile uploads.
+ *
  */
 @Slf4j
 @Service
@@ -164,11 +170,9 @@ public class FileSecurityService {
             previous = sanitized;
             // 모든 Path Traversal 패턴 제거
             sanitized = sanitized.replaceAll("\\.\\./", "")      // ../
-                    .replaceAll("\\.\\./", "")                    // ../ (중복 처리)
-                    .replaceAll("\\.\\\\", "")                    // ..\
-                    .replaceAll("\\.\\.\\\\", "")                 // ..\\ (중복)
-                    .replace("../", "")
-                    .replace("..\\", "");
+                    .replaceAll("\\.\\.\\\\", "")                 // ..\
+                    .replace("../", "")                           // 추가 안전망
+                    .replace("..\\", "");                         // 추가 안전망
 
             iterations++;
             if (iterations >= maxIterations) {
