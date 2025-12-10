@@ -5,7 +5,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.UriUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -81,7 +83,7 @@ public class ConfigService {
     private Map<String, Object> createDocumentConfig(String fileName, String fileExtension, String editorKey) {
         Map<String, Object> document = new HashMap<>();
         document.put("title", fileName);
-        document.put("url", serverBaseUrl + "/files/" + fileName);
+        document.put("url", serverBaseUrl + "/files/" + UriUtils.encode(fileName, StandardCharsets.UTF_8));
         document.put("fileType", fileExtension);
         document.put("key", editorKey);
 
@@ -102,7 +104,7 @@ public class ConfigService {
     private Map<String, Object> createEditorSettings(String fileName) {
         Map<String, Object> editorConfig = new HashMap<>();
         editorConfig.put("mode", "edit");
-        editorConfig.put("callbackUrl", serverBaseUrl + "/callback?fileName=" + fileName);
+        editorConfig.put("callbackUrl", serverBaseUrl + "/callback?fileName=" + UriUtils.encode(fileName, StandardCharsets.UTF_8));
         editorConfig.put("lang", "ko");
 
         // User 정보 (향후 인증 시스템 통합 가능)

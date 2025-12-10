@@ -114,28 +114,4 @@ public class JwtManager {
         }
     }
 
-    /**
-     * JWT 토큰 파싱 (검증 없이)
-     * 디버깅 용도로만 사용
-     */
-    public Claims parseTokenWithoutValidation(String token) {
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-
-        try {
-            // 서명 검증 없이 파싱 (주의: 보안에 취약하므로 디버깅 용도로만 사용)
-            int i = token.lastIndexOf('.');
-            String withoutSignature = token.substring(0, i + 1);
-
-            return Jwts.parser()
-                    .unsecured()
-                    .build()
-                    .parseUnsecuredClaims(withoutSignature)
-                    .getPayload();
-        } catch (Exception e) {
-            log.error("Failed to parse JWT token: {}", e.getMessage());
-            return null;
-        }
-    }
 }

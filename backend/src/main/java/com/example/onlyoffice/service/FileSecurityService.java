@@ -34,6 +34,24 @@ import java.util.zip.ZipInputStream;
  * Expected integration point: DocumentUploadController or similar REST endpoint
  * that accepts MultipartFile uploads.
  *
+ * <p>Example usage:
+ * <pre>
+ * {@code
+ * @PostMapping("/api/documents/upload")
+ * public ResponseEntity<DocumentDto> uploadDocument(@RequestParam("file") MultipartFile file) {
+ *     // 1. Validate file security
+ *     fileSecurityService.validateFile(file);
+ *
+ *     // 2. Save to storage (MinIO)
+ *     String objectName = minioStorageService.uploadFile(file, ...);
+ *
+ *     // 3. Create document record
+ *     Document document = documentService.createDocument(file, objectName);
+ *
+ *     return ResponseEntity.ok(documentDto);
+ * }
+ * }
+ * </pre>
  */
 @Slf4j
 @Service
@@ -290,14 +308,15 @@ public class FileSecurityService {
     /**
      * ZIP 폭탄 검증 - 압축 해제 크기 제한
      * OOXML 파일(.docx, .xlsx, .pptx)은 ZIP 형식이므로 압축 폭탄 공격 가능
+     *
+     * @param inputStream BufferedInputStream (already buffered)
      */
     private void validateZipBomb(InputStream inputStream) throws IOException {
         long totalUncompressedSize = 0;
         int entryCount = 0;
         final int MAX_ENTRIES = 1000; // 최대 엔트리 수 제한
 
-        try (BufferedInputStream bis = new BufferedInputStream(inputStream);
-             ZipInputStream zis = new ZipInputStream(bis)) {
+        try (ZipInputStream zis = new ZipInputStream(inputStream)) {
 
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
