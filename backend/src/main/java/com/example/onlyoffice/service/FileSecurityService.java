@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
@@ -103,21 +104,33 @@ public class FileSecurityService {
         // 3. 파일 크기 검증
         validateFileSize(file.getSize());
 
-        // 4. MIME 타입 및 매직 바이트 검증
+        // 4. 파일을 한 번만 읽어서 byte[]로 저장 (InputStream 재사용 문제 해결)
+        byte[] fileBytes;
         try {
-            String detectedMimeType = detectMimeType(file.getInputStream(), sanitizedFilename);
+            fileBytes = file.getBytes();
+        } catch (IOException e) {
+            throw new SecurityValidationException("파일 읽기 실패: " + e.getMessage(), e);
+        }
+
+        // 5. MIME 타입 및 매직 바이트 검증
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(fileBytes)) {
+            String detectedMimeType = detectMimeType(bais, sanitizedFilename);
             validateMimeType(extension, detectedMimeType);
 
-            // 5. 압축 폭탄 검증 (OOXML 파일만)
-            if (isOOXMLFile(extension)) {
-                validateZipBomb(file.getInputStream());
-            }
-
             log.info("File validation passed: {} ({}), size: {} bytes, MIME: {}",
-                    sanitizedFilename, extension, file.getSize(), detectedMimeType);
+                    sanitizedFilename, extension, fileBytes.length, detectedMimeType);
 
         } catch (IOException e) {
             throw new SecurityValidationException("파일 검증 중 오류 발생: " + e.getMessage(), e);
+        }
+
+        // 6. 압축 폭탄 검증 (OOXML 파일만) - 새로운 스트림 사용
+        if (isOOXMLFile(extension)) {
+            try (ByteArrayInputStream bais = new ByteArrayInputStream(fileBytes)) {
+                validateZipBomb(bais);
+            } catch (IOException e) {
+                throw new SecurityValidationException("ZIP 검증 중 오류 발생: " + e.getMessage(), e);
+            }
         }
     }
 
