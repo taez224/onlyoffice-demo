@@ -1,91 +1,36 @@
 package com.example.onlyoffice.controller;
 
-import com.example.onlyoffice.service.DocumentService;
-import com.example.onlyoffice.util.JwtManager;
+import com.example.onlyoffice.service.ConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 
-import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * ONLYOFFICE 에디터 설정 컨트롤러
+ * - 에디터 Config JSON 반환
+ */
 @Controller
 @RequiredArgsConstructor
 @Slf4j
 public class EditorController {
 
-    private final DocumentService documentService;
-    private final JwtManager jwtManager;
+    private final ConfigService configService;
 
-    @Value("${onlyoffice.url}")
-    private String onlyofficeUrl;
-
+    /**
+     * ONLYOFFICE 에디터 설정 반환
+     *
+     * @param fileName 편집할 파일명
+     * @return ONLYOFFICE 에디터 설정 (config + documentServerUrl)
+     */
     @GetMapping("/api/config")
-    @org.springframework.web.bind.annotation.ResponseBody
+    @ResponseBody
     public Map<String, Object> getEditorConfig(@RequestParam("fileName") String fileName) {
-        String serverUrl = documentService.getServerUrl();
-        String fileExtension = getFileExtension(fileName);
-        String documentType = getDocumentType(fileExtension);
-
-        // Service를 통해 editorKey 생성
-        String editorKey = documentService.getEditorKey(fileName);
-
-        Map<String, Object> config = new HashMap<>();
-        config.put("documentType", documentType);
-        config.put("type", "desktop");
-
-        Map<String, Object> document = new HashMap<>();
-        document.put("title", fileName);
-        document.put("url", serverUrl + "/files/" + fileName);
-        document.put("fileType", fileExtension);
-        document.put("key", editorKey);
-
-        Map<String, Object> permissions = new HashMap<>();
-        permissions.put("edit", true);
-        permissions.put("download", true);
-        document.put("permissions", permissions);
-
-        config.put("document", document);
-
-        Map<String, Object> editorConfig = new HashMap<>();
-        editorConfig.put("mode", "edit");
-        editorConfig.put("callbackUrl", serverUrl + "/callback?fileName=" + fileName);
-
-        Map<String, Object> user = new HashMap<>();
-        user.put("id", "uid-1");
-        user.put("name", "John Doe");
-        editorConfig.put("user", user);
-
-        config.put("editorConfig", editorConfig);
-
-        String token = jwtManager.createToken(config);
-        config.put("token", token);
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("config", config);
-        response.put("documentServerUrl", onlyofficeUrl);
-
-        log.info("Editor config generated for file: {}, key: {}", fileName, editorKey);
-        return response;
-    }
-
-    private String getFileExtension(String fileName) {
-        int lastDotIndex = fileName.lastIndexOf('.');
-        if (lastDotIndex > 0 && lastDotIndex < fileName.length() - 1) {
-            return fileName.substring(lastDotIndex + 1).toLowerCase();
-        }
-        return "";
-    }
-
-    private String getDocumentType(String extension) {
-        return switch (extension) {
-            case "docx", "doc", "odt", "txt", "rtf", "pdf", "djvu", "xps", "oxps" -> "word";
-            case "xlsx", "xls", "ods", "csv" -> "cell";
-            case "pptx", "ppt", "odp" -> "slide";
-            default -> "word";
-        };
+        log.info("Editor config requested for file: {}", fileName);
+        return configService.createEditorResponse(fileName);
     }
 }
