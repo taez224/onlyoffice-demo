@@ -22,6 +22,9 @@ onlyoffice:
   url: ${ONLYOFFICE_URL:http://localhost:9980}
   # JWT secret - must match docker-compose JWT_SECRET and be at least 32 characters
   secret: ${JWT_SECRET:your-secret-key-must-be-at-least-32-characters-long-for-hs256}
+  jwt:
+    # JWT token expiration time in hours (default: 1 hour)
+    expiration-hours: 1
 
 # Storage configuration
 storage:
