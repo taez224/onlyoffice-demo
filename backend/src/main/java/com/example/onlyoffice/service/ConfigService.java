@@ -5,9 +5,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.util.UriUtils;
+import org.springframework.web.util.UriComponentsBuilder;
 
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -83,7 +82,14 @@ public class ConfigService {
     private Map<String, Object> createDocumentConfig(String fileName, String fileExtension, String editorKey) {
         Map<String, Object> document = new HashMap<>();
         document.put("title", fileName);
-        document.put("url", serverBaseUrl + "/files/" + UriUtils.encode(fileName, StandardCharsets.UTF_8));
+
+        // UriComponentsBuilder로 안전한 URL 구성 (자동 인코딩)
+        String fileUrl = UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
+                .path("/files/{fileName}")
+                .buildAndExpand(fileName)
+                .toUriString();
+        document.put("url", fileUrl);
+
         document.put("fileType", fileExtension);
         document.put("key", editorKey);
 
@@ -104,7 +110,14 @@ public class ConfigService {
     private Map<String, Object> createEditorSettings(String fileName) {
         Map<String, Object> editorConfig = new HashMap<>();
         editorConfig.put("mode", "edit");
-        editorConfig.put("callbackUrl", serverBaseUrl + "/callback?fileName=" + UriUtils.encode(fileName, StandardCharsets.UTF_8));
+
+        // UriComponentsBuilder로 안전한 URL 구성 (쿼리 파라미터 자동 인코딩)
+        String callbackUrl = UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
+                .path("/callback")
+                .queryParam("fileName", fileName)
+                .toUriString();
+        editorConfig.put("callbackUrl", callbackUrl);
+
         editorConfig.put("lang", "ko");
 
         // User 정보 (향후 인증 시스템 통합 가능)
