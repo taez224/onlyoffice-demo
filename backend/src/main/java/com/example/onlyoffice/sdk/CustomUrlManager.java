@@ -10,13 +10,12 @@ import org.springframework.web.util.UriComponentsBuilder;
 /**
  * Custom implementation of ONLYOFFICE UrlManager
  * Extends DefaultUrlManager to leverage SDK's URL management features
- *
+ * <p>
  * Overrides required methods for application-specific URLs:
  * - getFileUrl(): Returns file download URL using Spring's UriComponentsBuilder
  * - getCallbackUrl(): Returns callback URL with fileName parameter
  * - getGobackUrl(): Returns redirect URL after editing
- * - getCreateUrl(): Not implemented (returns null)
- *
+ * <p>
  * Inherited features from DefaultUrlManager:
  * - getDocumentServerUrl(): Loads from SettingsManager
  * - getInnerDocumentServerUrl(): Supports Docker internal URLs
@@ -40,7 +39,7 @@ public class CustomUrlManager extends DefaultUrlManager {
         return UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
                 .path("/files/{fileName}")
                 .buildAndExpand(fileId)
-                .encode()  // URL 인코딩 필수
+                .encode()
                 .toUriString();
     }
 
@@ -49,7 +48,7 @@ public class CustomUrlManager extends DefaultUrlManager {
         return UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
                 .path("/callback")
                 .queryParam("fileName", fileId)
-                .encode()  // URL 인코딩 필수
+                .encode()
                 .toUriString();
     }
 
@@ -59,9 +58,4 @@ public class CustomUrlManager extends DefaultUrlManager {
         return serverBaseUrl + "/";
     }
 
-    @Override
-    public String getCreateUrl(String fileId) {
-        // Not implemented - return null
-        return null;
-    }
 }

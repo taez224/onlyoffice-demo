@@ -122,22 +122,4 @@ class CustomUrlManagerTest {
         }
     }
 
-    @Nested
-    @DisplayName("getCreateUrl")
-    class GetCreateUrl {
-
-        @Test
-        @DisplayName("구현되지 않음 - null 반환")
-        void shouldReturnNull() {
-            // given
-            String fileId = "sample.docx";
-
-            // when
-            String result = urlManager.getCreateUrl(fileId);
-
-            // then
-            assertThat(result).isNull();
-        }
-    }
-
 }

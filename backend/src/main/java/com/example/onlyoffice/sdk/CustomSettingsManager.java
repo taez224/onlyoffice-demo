@@ -1,6 +1,7 @@
 package com.example.onlyoffice.sdk;
 
 import com.onlyoffice.manager.settings.DefaultSettingsManager;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -12,9 +13,8 @@ import java.util.Map;
  * Custom implementation of ONLYOFFICE SettingsManager
  * Extends DefaultSettingsManager to leverage SDK's configuration features
  *
- * Only implements required abstract methods:
- * - getSetting(): Provides settings from application.yml to SDK
- * - setSetting(): Stores runtime settings (read-only in our implementation)
+ * Settings are initialized once in @PostConstruct from application.yml values,
+ * then stored in a Map for efficient retrieval.
  *
  * Inherited features from DefaultSettingsManager:
  * - SDK properties loading (getDocsIntegrationSdkProperties)
@@ -38,30 +38,29 @@ public class CustomSettingsManager extends DefaultSettingsManager {
 
     private final Map<String, String> settings = new HashMap<>();
 
+    /**
+     * Initialize ONLYOFFICE settings from application.yml
+     * Called after dependency injection is complete
+     */
+    @PostConstruct
+    public void init() {
+        // Document Server settings
+        setSetting("files.docservice.url.site", documentServerUrl);
+        setSetting("files.docservice.url.api", documentServerUrl + "/web-apps/apps/api/documents/api.js");
+        setSetting("files.docservice.url.preloader", documentServerUrl + "/web-apps/apps/api/documents/cache-scripts.html");
+
+        // Security settings
+        setSetting("files.docservice.secret", jwtSecret);
+        setSetting("files.docservice.secret.enable", "true");
+        setSetting("files.docservice.secret.header", "Authorization");
+
+        log.info("ONLYOFFICE settings initialized: documentServerUrl={}, serverBaseUrl={}",
+                documentServerUrl, serverBaseUrl);
+    }
+
     @Override
     public String getSetting(String name) {
-        // First check runtime settings
-        if (settings.containsKey(name)) {
-            return settings.get(name);
-        }
-
-        // Then provide settings from application.yml
-        return switch (name) {
-            // Document Server settings
-            case "files.docservice.url.site" -> documentServerUrl;
-            case "files.docservice.url.api" -> documentServerUrl + "/web-apps/apps/api/documents/api.js";
-            case "files.docservice.url.preloader" -> documentServerUrl + "/web-apps/apps/api/documents/cache-scripts.html";
-
-            // Security settings
-            case "files.docservice.secret" -> jwtSecret;
-            case "files.docservice.secret.enable" -> "true";
-            case "files.docservice.secret.header" -> "Authorization";
-
-            default -> {
-                log.warn("Unknown setting requested: {}", name);
-                yield null;
-            }
-        };
+        return settings.get(name);
     }
 
     @Override

@@ -20,6 +20,9 @@ class CustomSettingsManagerTest {
         ReflectionTestUtils.setField(settingsManager, "documentServerUrl", "http://localhost:9980");
         ReflectionTestUtils.setField(settingsManager, "jwtSecret", "test-secret-key-32-chars-long-min");
         ReflectionTestUtils.setField(settingsManager, "serverBaseUrl", "http://localhost:8080");
+
+        // Manually call @PostConstruct method to initialize settings
+        settingsManager.init();
     }
 
     @Nested

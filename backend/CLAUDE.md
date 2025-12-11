@@ -2,6 +2,9 @@
 
 **✨ ONLYOFFICE SDK 1.7.0 Integration - Type-safe Config & Callbacks**
 
+> ONLYOFFICE SDK Github: https://github.com/ONLYOFFICE/docs-integration-sdk-java
+
+> ONLYOFFICE Integration Example Github: https://github.com/ONLYOFFICE/document-server-integration/tree/master/web/documentserver-example/java
 ## Quick Start
 
 ```bash
