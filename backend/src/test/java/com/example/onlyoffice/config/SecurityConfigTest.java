@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -134,5 +135,106 @@ class SecurityConfigTest {
         // when & then: 경고는 발생하지만 예외는 아님
         assertThatCode(() -> securityConfig.validateJwtSecret())
                 .doesNotThrowAnyException();
+    }
+
+    // ===== server.baseUrl Validation Tests =====
+
+    @Test
+    @DisplayName("유효한 HTTP/HTTPS URL 검증 통과")
+    void shouldPassValidationWithValidUrl() {
+        // given: 유효한 JWT secret
+        when(onlyOfficeProperties.getSecret())
+                .thenReturn("valid-secret-key-32-chars-long-min");
+
+        // Test HTTP URL
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", "http://host.docker.internal:8080");
+
+        // when & then: HTTP URL은 검증 통과
+        assertThatCode(() -> {
+            securityConfig.validateJwtSecret();
+            securityConfig.validateServerBaseUrl();
+        }).doesNotThrowAnyException();
+
+        // Test HTTPS URL
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", "https://example.com:8080");
+
+        // when & then: HTTPS URL도 검증 통과
+        assertThatCode(() -> {
+            securityConfig.validateJwtSecret();
+            securityConfig.validateServerBaseUrl();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("null/blank URL은 검증 실패")
+    void shouldRejectNullOrBlankUrl() {
+        // Test null
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", null);
+        assertThatThrownBy(() -> securityConfig.validateServerBaseUrl())
+                .isInstanceOf(SecurityValidationException.class)
+                .hasMessageContaining("server.baseUrl is required");
+
+        // Test blank
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", "   ");
+        assertThatThrownBy(() -> securityConfig.validateServerBaseUrl())
+                .isInstanceOf(SecurityValidationException.class)
+                .hasMessageContaining("server.baseUrl is required");
+    }
+
+    @Test
+    @DisplayName("trailing slash가 있으면 검증 실패")
+    void shouldRejectUrlWithTrailingSlash() {
+        // given
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", "http://localhost:8080/");
+
+        // when & then: trailing slash가 있으면 실패하고 수정 방법 제시
+        assertThatThrownBy(() -> securityConfig.validateServerBaseUrl())
+                .isInstanceOf(SecurityValidationException.class)
+                .hasMessageContaining("must not end with a trailing slash")
+                .hasMessageContaining("http://localhost:8080"); // 올바른 값 제시
+    }
+
+    @Test
+    @DisplayName("유효하지 않은 URL 형식은 검증 실패")
+    void shouldRejectInvalidUrlFormat() {
+        // Test invalid format (scheme 없음 → scheme == null 검증에서 실패)
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", "not-a-url");
+        assertThatThrownBy(() -> securityConfig.validateServerBaseUrl())
+                .isInstanceOf(SecurityValidationException.class)
+                .hasMessageContaining("must be a valid HTTP or HTTPS URL");
+
+        // Test FTP scheme (not HTTP/HTTPS)
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", "ftp://localhost:8080");
+        assertThatThrownBy(() -> securityConfig.validateServerBaseUrl())
+                .isInstanceOf(SecurityValidationException.class)
+                .hasMessageContaining("must be a valid HTTP or HTTPS URL");
+
+        // Test missing host (URI.create() throws IllegalArgumentException)
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", "http://");
+        assertThatThrownBy(() -> securityConfig.validateServerBaseUrl())
+                .isInstanceOf(SecurityValidationException.class)
+                .hasMessageContaining("not a valid URL format");
+    }
+
+    @Test
+    @DisplayName("localhost 포함 시 경고만 (통과)")
+    void shouldWarnForLocalhostButPass() {
+        // given
+        when(onlyOfficeProperties.getSecret())
+                .thenReturn("valid-secret-key-32-chars-long-min");
+
+        // Test localhost
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", "http://localhost:8080");
+        assertThatCode(() -> {
+            securityConfig.validateJwtSecret();
+            securityConfig.validateServerBaseUrl();
+        }).doesNotThrowAnyException(); // 경고만 발생, 검증은 통과
+
+        // Test 127.0.0.1
+        ReflectionTestUtils.setField(securityConfig, "serverBaseUrl", "http://127.0.0.1:8080");
+        assertThatCode(() -> {
+            securityConfig.validateJwtSecret();
+            securityConfig.validateServerBaseUrl();
+        }).doesNotThrowAnyException(); // 경고만 발생, 검증은 통과
     }
 }
