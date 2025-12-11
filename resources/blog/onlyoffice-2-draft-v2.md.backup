@@ -1,0 +1,1075 @@
+# ONLYOFFICE 2편: Document.key 관리와 DB 연동으로 실전 시스템 만들기
+
+## 📄 시리즈 정보
+
+- **1편**: ONLYOFFICE 기본 연동 (수동 Config, 로컬 파일)
+- **2편**: Document.key 관리 + DB 연동 + 계층 분리 ← 현재 글
+- **3편**: MinIO 완전 통합 + 보안 강화 (예정)
+
+---
+
+## 🎯 2편에서 만들 것
+
+1편에서는 ONLYOFFICE를 연동하는 최소한의 코드를 작성했지만, 여러 문제가 있었습니다:
+
+### 1편의 문제점
+
+```java
+// ❌ 파일시스템 lastModified에 의존
+document.put("key", fileName + "_" + file.lastModified());
+
+// ❌ Controller에서 Repository 직접 사용 (계층 분리 위반)
+private final DocumentRepository documentRepository;
+
+// ❌ 저장 후 key 갱신 안 함 → 캐시된 이전 버전 열림
+if (status == 2) {
+    documentService.saveFile(fileName, inputStream);
+    // key 변경 없음!
+}
+```
+
+### 2편에서 해결할 것
+
+✅ **document.key 올바른 관리**: OnlyOffice 공식 스펙에 맞게 구현
+✅ **DB 기반 버전 관리**: editorVersion 필드로 추적
+✅ **계층 분리**: Controller → Service → Repository
+✅ **PostgreSQL + JPA**: 문서 메타데이터 영구 저장
+✅ **KeyUtils**: 128자 제한, 특수문자 제거
+✅ **Force Save 처리**: co-editing 세션 유지
+
+> **주의**: MinIO는 인프라만 준비하고, 실제 통합은 3편에서 진행합니다.
+
+---
+
+## 📚 OnlyOffice document.key 스펙 이해하기
+
+### Key의 두 가지 종류
+
+| 구분 | `document.key` | `referenceData.fileKey` |
+|------|----------------|-------------------------|
+| **용도** | 편집 세션 식별 | 파일 영구 식별 |
+| **변경 시점** | 저장할 때마다 새로 생성 | 불변 (파일 생성 시 1회) |
+| **역할** | 에디터 캐시 관리, co-editing 세션 공유 | 외부 데이터 참조 |
+
+### 공식 스펙 요구사항
+
+```
+"Every time the document is edited and saved, the key must be generated anew."
+```
+
+**제약사항:**
+- 최대 길이: **128자**
+- 특수문자: **사용 불가** (영문, 숫자, `_`, `-` 만 허용)
+- 고유성: 동일 Document Server에 연결된 모든 서비스에서 고유
+
+### Callback Status별 key 처리
+
+| Status | 의미 | key 처리 |
+|--------|------|----------|
+| **2** | 편집 종료 & 저장 완료 | ✅ editorVersion 증가 |
+| **6** | Force Save (세션 중 저장) | ⚠️ editorVersion **유지** |
+
+**왜 Force Save에서 key를 유지할까?**
+
+```
+User A: key=doc_v3 ──► Force Save ──► key 그대로 유지
+User B: key=doc_v3 ──► 계속 co-editing 가능
+
+만약 Force Save에서 key를 변경하면?
+→ User A: key=doc_v4 (변경됨)
+→ User B: key=doc_v3 (기존)
+→ co-editing 세션 깨짐!
+```
+
+---
+
+## 🏗️ 아키텍처
+
+### As-Is (1편)
+
+```
+Controller → File System (lastModified 기반 key)
+```
+
+### To-Be (2편)
+
+```
+┌──────────────┐
+│   Frontend   │
+└──────┬───────┘
+       │
+┌──────┴───────┐
+│  Controller  │  HTTP 요청/응답만 처리
+└──────┬───────┘
+       │
+┌──────┴───────┐
+│   Service    │  비즈니스 로직 (key 생성, 버전 관리)
+└──┬───────┬───┘
+   │       │
+   │       └──► Repository → PostgreSQL
+   │
+   └──────────► File System (storage/)
+```
+
+---
+
+## 💻 Part 1: Infrastructure Setup
+
+### docker-compose.yml
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: onlyoffice-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  minio:
+    image: minio/minio:latest
+    container_name: onlyoffice-minio
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./minio_data:/data
+    command: server /data --console-address ":9001"
+    restart: always
+
+  onlyoffice-docs:
+    image: onlyoffice/documentserver:9.1
+    container_name: onlyoffice-docs
+    ports:
+      - "9980:80"
+    environment:
+      - JWT_ENABLED=true
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./onlyoffice_data/logs:/var/log/onlyoffice
+      - ./onlyoffice_data/data:/var/www/onlyoffice/Data
+    restart: always
+```
+
+### .env 파일
+
+```env
+# PostgreSQL
+POSTGRES_DB=onlyoffice_demo
+POSTGRES_USER=demo
+POSTGRES_PASSWORD=your-secure-password-here
+
+# MinIO (3편에서 사용)
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=your-minio-password-here
+
+# ONLYOFFICE JWT (최소 32자)
+JWT_SECRET=your-secret-key-must-be-at-least-32-characters-long-for-hs256
+```
+
+```bash
+docker-compose up -d
+```
+
+✅ **체크포인트 1**: 3개 컨테이너 정상 실행
+
+---
+
+## 💻 Part 2: Document Entity 설계
+
+### Document.java
+
+```java
+@Entity
+@Table(name = "documents", indexes = {
+    @Index(name = "idx_file_key", columnList = "file_key"),
+    @Index(name = "idx_file_name", columnList = "file_name")
+})
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Document {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "file_name", nullable = false)
+    private String fileName;
+
+    /**
+     * ONLYOFFICE referenceData용 파일 식별자 (불변)
+     * 외부 데이터 참조, 파일 링크 등에 사용
+     */
+    @Column(name = "file_key", nullable = false, unique = true)
+    private String fileKey;
+
+    /**
+     * ONLYOFFICE 편집 세션 버전 (가변)
+     * 문서가 편집되고 저장될 때마다 증가
+     * document.key 생성에 사용: fileKey + "_v" + editorVersion
+     */
+    @Column(name = "editor_version", nullable = false)
+    @Builder.Default
+    private Integer editorVersion = 0;
+
+    @Column(name = "file_type", nullable = false)
+    private String fileType;
+
+    @Column(name = "document_type", nullable = false)
+    private String documentType;  // word, cell, slide
+
+    @Column(name = "file_size", nullable = false)
+    private Long fileSize;
+
+    @Column(name = "storage_path", nullable = false)
+    private String storagePath;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    @Builder.Default
+    private DocumentStatus status = DocumentStatus.PENDING;
+
+    @Version
+    @Builder.Default
+    private Integer version = 1;  // 낙관적 락
+
+    @CreationTimestamp
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;  // Soft delete
+
+    /**
+     * ONLYOFFICE document.key 생성
+     */
+    public String getEditorKey() {
+        return fileKey + "_v" + editorVersion;
+    }
+
+    /**
+     * 편집 세션 버전 증가 (status=2일 때만)
+     */
+    public void incrementEditorVersion() {
+        this.editorVersion++;
+    }
+}
+```
+
+### DocumentRepository.java
+
+```java
+@Repository
+public interface DocumentRepository extends JpaRepository<Document, Long> {
+
+    Optional<Document> findByFileNameAndDeletedAtIsNull(String fileName);
+
+    Optional<Document> findByFileKeyAndDeletedAtIsNull(String fileKey);
+
+    List<Document> findAllByDeletedAtIsNull(Sort sort);
+
+    Page<Document> searchByFileName(
+        @Param("pattern") String pattern,
+        Pageable pageable
+    );
+}
+```
+
+---
+
+## 💻 Part 3: KeyUtils 유틸리티
+
+### KeyUtils.java
+
+```java
+public final class KeyUtils {
+
+    public static final int MAX_KEY_LENGTH = 128;
+    private static final Pattern SAFE_CHARS = Pattern.compile("[^a-zA-Z0-9_-]");
+
+    /**
+     * 안전한 document.key 생성
+     */
+    public static String generateEditorKey(String fileKey, int version) {
+        if (fileKey == null || fileKey.isBlank()) {
+            throw new IllegalArgumentException("fileKey cannot be null");
+        }
+
+        String raw = fileKey + "_v" + version;
+        String safe = sanitize(raw);
+
+        if (safe.length() > MAX_KEY_LENGTH) {
+            return generateHashBasedKey(fileKey, version);
+        }
+
+        return safe;
+    }
+
+    /**
+     * 특수문자 제거
+     */
+    public static String sanitize(String input) {
+        if (input == null) return "";
+        return SAFE_CHARS.matcher(input).replaceAll("");
+    }
+
+    /**
+     * key 유효성 검증
+     */
+    public static boolean isValidKey(String key) {
+        if (key == null || key.isBlank()) return false;
+        if (key.length() > MAX_KEY_LENGTH) return false;
+        return !SAFE_CHARS.matcher(key).find();
+    }
+
+    /**
+     * 해시 기반 축약 key 생성 (긴 fileKey용)
+     */
+    private static String generateHashBasedKey(String fileKey, int version) {
+        String hash = DigestUtils.md5DigestAsHex(
+            fileKey.getBytes(StandardCharsets.UTF_8)
+        ).substring(0, 16);
+        return hash + "_v" + version;
+    }
+}
+```
+
+---
+
+## 💻 Part 4: Service 계층 (핵심!)
+
+### DocumentService.java
+
+```java
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class DocumentService {
+
+    private final DocumentRepository documentRepository;
+
+    @Value("${storage.path}")
+    private String storagePath;
+
+    // ==================== Key 관리 ====================
+
+    /**
+     * ONLYOFFICE document.key 생성
+     * DB에 문서가 있으면 DB 기반, 없으면 파일시스템 fallback
+     */
+    public String getEditorKey(String fileName) {
+        File file = getFile(fileName);
+
+        return documentRepository.findByFileNameAndDeletedAtIsNull(fileName)
+            .map(doc -> {
+                String key = KeyUtils.generateEditorKey(
+                    doc.getFileKey(),
+                    doc.getEditorVersion()
+                );
+                log.debug("Using DB-based key for {}: {}", fileName, key);
+                return key;
+            })
+            .orElseGet(() -> {
+                // DB에 문서가 없으면 파일시스템 기반 fallback
+                String fallbackKey = KeyUtils.sanitize(
+                    fileName + "_" + file.lastModified()
+                );
+                log.warn("Document not found in DB, using fallback: {}",
+                    fallbackKey);
+                return fallbackKey;
+            });
+    }
+
+    /**
+     * 편집 종료(status=2) 후 editorVersion 증가
+     */
+    public void incrementEditorVersion(String fileName) {
+        documentRepository.findByFileNameAndDeletedAtIsNull(fileName)
+            .ifPresentOrElse(
+                doc -> {
+                    int oldVersion = doc.getEditorVersion();
+                    doc.incrementEditorVersion();
+                    documentRepository.save(doc);
+                    log.info("Version incremented: {} -> {}",
+                        oldVersion, doc.getEditorVersion());
+                },
+                () -> log.warn("Document not found: {}", fileName)
+            );
+    }
+
+    /**
+     * URL에서 편집된 문서 다운로드 및 저장
+     */
+    public void saveDocumentFromUrl(String downloadUrl, String fileName) {
+        log.info("Downloading from {} to {}", downloadUrl, fileName);
+        try (InputStream in = URI.create(downloadUrl).toURL().openStream()) {
+            saveFile(fileName, in);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to save document", e);
+        }
+    }
+
+    // ==================== File I/O ====================
+
+    public File getFile(String fileName) {
+        return Paths.get(storagePath).resolve(fileName).toFile();
+    }
+
+    public void saveFile(String fileName, InputStream inputStream) {
+        try {
+            Path dest = Paths.get(storagePath).resolve(fileName);
+            Files.copy(inputStream, dest, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to store file", e);
+        }
+    }
+}
+```
+
+---
+
+## 💻 Part 5: Controller 계층
+
+### EditorController.java
+
+```java
+@Controller
+@RequiredArgsConstructor
+@Slf4j
+public class EditorController {
+
+    private final DocumentService documentService;
+    private final JwtManager jwtManager;
+
+    @Value("${onlyoffice.url}")
+    private String onlyofficeUrl;
+
+    @GetMapping("/api/config")
+    @ResponseBody
+    public Map<String, Object> getEditorConfig(
+        @RequestParam("fileName") String fileName
+    ) {
+        String serverUrl = documentService.getServerUrl();
+        String fileExtension = getFileExtension(fileName);
+        String documentType = getDocumentType(fileExtension);
+
+        // Service를 통해 editorKey 생성
+        String editorKey = documentService.getEditorKey(fileName);
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("documentType", documentType);
+
+        Map<String, Object> document = new HashMap<>();
+        document.put("title", fileName);
+        document.put("url", serverUrl + "/files/" + fileName);
+        document.put("fileType", fileExtension);
+        document.put("key", editorKey);  // DB 기반 key!
+
+        Map<String, Object> editorConfig = new HashMap<>();
+        editorConfig.put("mode", "edit");
+        editorConfig.put("callbackUrl",
+            serverUrl + "/callback?fileName=" + fileName);
+
+        config.put("document", document);
+        config.put("editorConfig", editorConfig);
+
+        String token = jwtManager.createToken(config);
+        config.put("token", token);
+
+        log.info("Config generated for {}, key: {}", fileName, editorKey);
+        return Map.of("config", config, "documentServerUrl", onlyofficeUrl);
+    }
+
+    private String getDocumentType(String ext) {
+        return switch (ext) {
+            case "docx", "doc" -> "word";
+            case "xlsx", "xls" -> "cell";
+            case "pptx", "ppt" -> "slide";
+            default -> "word";
+        };
+    }
+}
+```
+
+### CallbackController.java
+
+```java
+@RestController
+@RequiredArgsConstructor
+@Slf4j
+public class CallbackController {
+
+    private final DocumentService documentService;
+    private final JwtManager jwtManager;
+    private final ObjectMapper objectMapper;
+
+    /**
+     * ONLYOFFICE Callback 처리
+     *
+     * Status 코드:
+     * - 1: 편집 중
+     * - 2: 저장 완료 → 파일 저장 + editorVersion 증가
+     * - 6: Force Save → 파일만 저장 (editorVersion 유지)
+     */
+    @PostMapping("/callback")
+    public Map<String, Object> callback(
+        HttpServletRequest request,
+        @RequestBody String body
+    ) {
+        try {
+            // 1. JWT 검증
+            String authHeader = request.getHeader("Authorization");
+            if (!jwtManager.validateToken(authHeader)) {
+                log.error("Invalid JWT token");
+                return Map.of("error", 1);
+            }
+
+            // 2. 파싱
+            Map<String, Object> data = objectMapper.readValue(body, Map.class);
+            int status = (int) data.get("status");
+            String key = (String) data.get("key");
+            String fileName = request.getParameter("fileName");
+
+            log.info("Callback: status={}, key={}", status, key);
+
+            // 3. Status별 처리
+            switch (status) {
+                case 2 -> {
+                    // 편집 종료 & 저장
+                    String url = (String) data.get("url");
+                    documentService.saveDocumentFromUrl(url, fileName);
+                    documentService.incrementEditorVersion(fileName);
+                }
+                case 6 -> {
+                    // Force Save (co-editing 세션 유지)
+                    String url = (String) data.get("url");
+                    documentService.saveDocumentFromUrl(url, fileName);
+                    log.info("Force save, version not changed");
+                }
+            }
+
+            return Map.of("error", 0);
+
+        } catch (Exception e) {
+            log.error("Callback error", e);
+            return Map.of("error", 1);
+        }
+    }
+}
+```
+
+---
+
+## 💻 Part 6: 테스트
+
+### KeyUtilsTest.java
+
+```java
+@DisplayName("KeyUtils")
+class KeyUtilsTest {
+
+    @Test
+    @DisplayName("정상적인 key 생성")
+    void shouldGenerateKey() {
+        String key = KeyUtils.generateEditorKey("doc123", 5);
+        assertThat(key).isEqualTo("doc123_v5");
+    }
+
+    @Test
+    @DisplayName("128자 제한")
+    void shouldLimitTo128Chars() {
+        String longKey = "a".repeat(200);
+        String result = KeyUtils.generateEditorKey(longKey, 1);
+        assertThat(result.length()).isLessThanOrEqualTo(128);
+    }
+
+    @Test
+    @DisplayName("특수문자 제거")
+    void shouldRemoveSpecialChars() {
+        String result = KeyUtils.sanitize("file@name#.docx");
+        assertThat(result).isEqualTo("filenamedocx");
+    }
+
+    @Test
+    @DisplayName("유효성 검증")
+    void shouldValidate() {
+        assertThat(KeyUtils.isValidKey("doc_v1")).isTrue();
+        assertThat(KeyUtils.isValidKey("doc@123")).isFalse();
+        assertThat(KeyUtils.isValidKey("a".repeat(129))).isFalse();
+    }
+}
+```
+
+---
+
+## 🎬 데모 시나리오
+
+### 1. 초기 상태
+
+```
+documents 테이블: 비어있음
+storage/: sample.docx 존재
+```
+
+### 2. 첫 편집
+
+```bash
+# 1. Config 요청
+curl "http://localhost:8080/api/config?fileName=sample.docx"
+{
+  "config": {
+    "document": {
+      "key": "sampledocx_1733712000000"  # Fallback key (DB 없음)
+    }
+  }
+}
+
+# 2. 편집 후 저장 (Callback status=2)
+→ 파일 저장됨
+→ editorVersion 증가 없음 (DB에 레코드 없음)
+```
+
+### 3. DB에 문서 등록 후
+
+```sql
+INSERT INTO documents (
+  file_name, file_key, editor_version, file_type, ...
+) VALUES (
+  'sample.docx', 'doc_abc123', 0, 'docx', ...
+);
+```
+
+```bash
+# Config 요청
+curl "http://localhost:8080/api/config?fileName=sample.docx"
+{
+  "config": {
+    "document": {
+      "key": "doc_abc123_v0"  # DB 기반 key!
+    }
+  }
+}
+
+# 편집 후 저장
+→ editorVersion: 0 → 1
+
+# 다음 편집
+→ key: "doc_abc123_v1"
+```
+
+---
+
+## 🔍 핵심 개선 포인트
+
+### Before (1편)
+
+```java
+// ❌ Controller에서 Repository 직접 사용
+private final DocumentRepository documentRepository;
+
+// ❌ 파일시스템 의존
+String key = fileName + "_" + file.lastModified();
+
+// ❌ 저장 후 key 갱신 안 함
+if (status == 2) {
+    saveFile(fileName, inputStream);
+}
+```
+
+### After (2편)
+
+```java
+// ✅ Service 계층 분리
+private final DocumentService documentService;
+
+// ✅ DB 기반 key 생성
+String key = documentService.getEditorKey(fileName);
+// → KeyUtils.generateEditorKey(fileKey, editorVersion)
+
+// ✅ 저장 후 버전 증가
+if (status == 2) {
+    documentService.saveDocumentFromUrl(url, fileName);
+    documentService.incrementEditorVersion(fileName);
+}
+```
+
+---
+
+## 📊 비교표
+
+| 항목 | 1편 | 2편 |
+|------|-----|-----|
+| **Key 생성** | `fileName + lastModified` | `fileKey + "_v" + editorVersion` |
+| **Key 관리** | 파일시스템 의존 | DB 기반 버전 관리 |
+| **저장 후 처리** | 없음 | editorVersion 증가 |
+| **계층 분리** | Controller → Repository | Controller → Service → Repository |
+| **Force Save** | 구분 안 함 | version 유지 (co-editing) |
+| **Key 검증** | 없음 | KeyUtils (128자, 특수문자) |
+
+---
+
+## 🤔 3편 예고
+
+### ⚠️ 현재 한계
+
+```java
+@Configuration
+@Slf4j
+public class MinioConfig {
+
+    @Value("${minio.endpoint}")
+    private String endpoint;
+
+    @Value("${minio.accessKey}")
+    private String accessKey;
+
+    @Value("${minio.secretKey}")
+    private String secretKey;
+
+    @Bean
+    public MinioClient minioClient() {
+        log.info("Initializing MinIO client with endpoint: {}", endpoint);
+        return MinioClient.builder()
+                .endpoint(endpoint)
+                .credentials(accessKey, secretKey)
+                .build();
+    }
+}
+```
+
+### MinioStorageService.java
+
+```java
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class MinioStorageService {
+
+    private final MinioClient minioClient;
+
+    @Value("${minio.bucket}")
+    private String bucket;
+
+    @Value("${minio.presigned-url-expiry}")
+    private int presignedUrlExpiry;
+
+    @PostConstruct
+    public void init() {
+        try {
+            boolean found = minioClient.bucketExists(
+                    BucketExistsArgs.builder().bucket(bucket).build()
+            );
+
+            if (!found) {
+                minioClient.makeBucket(
+                        MakeBucketArgs.builder().bucket(bucket).build()
+                );
+                log.info("MinIO bucket created: {}", bucket);
+            } else {
+                log.info("MinIO bucket already exists: {}", bucket);
+            }
+        } catch (Exception e) {
+            throw new StorageException("Failed to initialize MinIO bucket", e);
+        }
+    }
+
+    /**
+     * 파일 업로드 (MultipartFile → MinIO)
+     */
+    public String uploadFile(MultipartFile file, String objectName) {
+        try (InputStream inputStream = file.getInputStream()) {
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(bucket)
+                            .object(objectName)
+                            .stream(inputStream, file.getSize(), -1)
+                            .contentType(file.getContentType())
+                            .build()
+            );
+            log.info("File uploaded to MinIO: {}/{}", bucket, objectName);
+            return objectName;
+        } catch (Exception e) {
+            throw new StorageException("Failed to upload file: " + objectName, e);
+        }
+    }
+
+    /**
+     * 파일 다운로드 (MinIO → InputStream)
+     */
+    public InputStream downloadFile(String objectName) {
+        try {
+            return minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(bucket)
+                            .object(objectName)
+                            .build()
+            );
+        } catch (ErrorResponseException e) {
+            if (e.errorResponse().code().equals("NoSuchKey")) {
+                throw new StorageException("File not found: " + objectName);
+            }
+            throw new StorageException("Failed to download file: " + objectName, e);
+        } catch (Exception e) {
+            throw new StorageException("Failed to download file: " + objectName, e);
+        }
+    }
+
+    /**
+     * 파일 삭제
+     */
+    public void deleteFile(String objectName) {
+        try {
+            minioClient.removeObject(
+                    RemoveObjectArgs.builder()
+                            .bucket(bucket)
+                            .object(objectName)
+                            .build()
+            );
+            log.info("File deleted from MinIO: {}/{}", bucket, objectName);
+        } catch (Exception e) {
+            throw new StorageException("Failed to delete file: " + objectName, e);
+        }
+    }
+
+    /**
+     * Presigned URL 생성 (1시간 유효)
+     */
+    public String generatePresignedUrl(String objectName) {
+        try {
+            String url = minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.GET)
+                            .bucket(bucket)
+                            .object(objectName)
+                            .expiry(presignedUrlExpiry, TimeUnit.SECONDS)
+                            .build()
+            );
+            log.debug("Generated presigned URL for {}, expiry: {} seconds",
+                objectName, presignedUrlExpiry);
+            return url;
+        } catch (Exception e) {
+            throw new StorageException("Failed to generate presigned URL: " + objectName, e);
+        }
+    }
+
+    /**
+     * 객체 존재 여부 확인
+     */
+    public boolean objectExists(String objectName) {
+        try {
+            minioClient.statObject(
+                    StatObjectArgs.builder()
+                            .bucket(bucket)
+                            .object(objectName)
+                            .build()
+            );
+            return true;
+        } catch (ErrorResponseException e) {
+            if (e.errorResponse().code().equals("NoSuchKey")) {
+                return false;
+            }
+            throw new StorageException("Failed to check object existence: " + objectName, e);
+        } catch (Exception e) {
+            throw new StorageException("Failed to check object existence: " + objectName, e);
+        }
+    }
+}
+```
+
+### StorageException.java
+
+```java
+public class StorageException extends RuntimeException {
+    public StorageException(String message) {
+        super(message);
+    }
+
+    public StorageException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+```
+
+### application.yml (MinIO 설정 추가)
+
+```yaml
+# MinIO Configuration
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  accessKey: ${MINIO_ROOT_USER:minioadmin}
+  secretKey: ${MINIO_ROOT_PASSWORD:minioadmin_password}
+  bucket: ${MINIO_BUCKET:onlyoffice-documents}
+  presigned-url-expiry: 3600  # 1시간 (초)
+```
+
+### .env 파일 업데이트
+
+```env
+# MinIO (이제 실제 사용!)
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=your-minio-password-here
+MINIO_ENDPOINT=http://localhost:9000
+MINIO_BUCKET=onlyoffice-documents
+```
+
+### 테스트 작성
+
+```java
+@ExtendWith(MockitoExtension.class)
+@DisplayName("MinioStorageService 단위 테스트")
+class MinioStorageServiceTest {
+
+    @Mock
+    private MinioClient minioClient;
+
+    @InjectMocks
+    private MinioStorageService storageService;
+
+    @Test
+    @DisplayName("버킷이 존재하지 않으면 새로 생성한다")
+    void init_CreatesBucket_WhenNotExists() throws Exception {
+        when(minioClient.bucketExists(any(BucketExistsArgs.class)))
+            .thenReturn(false);
+
+        storageService.init();
+
+        verify(minioClient).bucketExists(any(BucketExistsArgs.class));
+        verify(minioClient).makeBucket(any(MakeBucketArgs.class));
+    }
+
+    @Test
+    @DisplayName("MultipartFile을 MinIO에 업로드할 수 있다")
+    void uploadFile_Success() throws Exception {
+        String objectName = "documents/test.docx";
+        MultipartFile file = new MockMultipartFile(
+            "file", "test.docx", "application/...", "content".getBytes()
+        );
+
+        ObjectWriteResponse mockResponse = mock(ObjectWriteResponse.class);
+        when(minioClient.putObject(any(PutObjectArgs.class)))
+            .thenReturn(mockResponse);
+
+        String result = storageService.uploadFile(file, objectName);
+
+        assertThat(result).isEqualTo(objectName);
+        verify(minioClient).putObject(any(PutObjectArgs.class));
+    }
+}
+```
+
+### 구현된 기능 요약
+
+| 메서드 | 설명 |
+|--------|------|
+| `init()` | 버킷 자동 생성 (@PostConstruct) |
+| `uploadFile()` | MultipartFile → MinIO 업로드 |
+| `downloadFile()` | MinIO → InputStream 다운로드 |
+| `deleteFile()` | MinIO 객체 삭제 |
+| `generatePresignedUrl()` | 1시간 유효 임시 URL 생성 |
+| `objectExists()` | 파일 존재 여부 확인 |
+
+### 테스트 결과
+
+```bash
+./gradlew test --tests MinioStorageServiceTest
+
+✅ 13개 테스트 모두 통과
+- 버킷 초기화 (3개)
+- 파일 업로드 (2개)
+- 파일 다운로드 (2개)
+- 파일 삭제 (2개)
+- Presigned URL 생성 (2개)
+- 객체 존재 여부 확인 (2개)
+```
+
+### 2편과 3편의 가교
+
+**2편 완성 내용**:
+- ✅ DB 기반 document.key 관리
+- ✅ editorVersion으로 버전 추적
+- ✅ KeyUtils로 key 생성/검증
+- ✅ 계층 분리 (Controller → Service → Repository)
+- ✅ **MinIO Storage Service 구현** ← NEW!
+
+**3편에서 할 일**:
+- DocumentService가 MinioStorageService 사용
+- FileController를 Presigned URL 기반으로 전환
+- 파일 업로드 API + DB 통합
+- Saga 패턴으로 트랜잭션 보장
+
+---
+
+## 🤔 3편 예고
+
+### ⚠️ 현재 한계
+
+1. ~~**파일 저장소**: 로컬 파일 시스템 (MinIO 미사용)~~ ← **MinioStorageService로 해결**
+2. **문서 생성**: 수동 INSERT (업로드 API 없음)
+3. **보안**: 파일 검증 없음
+4. **트랜잭션**: DB ↔ MinIO 원자성 보장 안 됨
+5. **통합**: DocumentService가 아직 MinIO 미사용
+
+### 3편에서 추가할 것
+
+✅ **MinIO 완전 통합**: DocumentService + MinioStorageService 연결
+✅ **Document Upload API**: 파일 업로드 → DB + MinIO (원자적)
+✅ **Apache Tika**: 파일 검증 (매직 바이트, MIME)
+✅ **Saga 패턴**: 분산 트랜잭션 원자성 보장
+✅ **Presigned URL 기반 파일 서빙**: FileController 전환
+✅ **Next.js UI**: 문서 목록 + 에디터 페이지
+
+---
+
+## 📝 정리
+
+### 2편에서 배운 핵심
+
+1. **document.key 스펙 이해**: 편집 세션 vs 파일 영구 ID
+2. **DB 기반 버전 관리**: editorVersion 필드로 추적
+3. **KeyUtils 유틸리티**: 128자 제한, 특수문자 제거, 해시 축약
+4. **계층 분리**: Controller는 HTTP만, Service가 비즈니스 로직
+5. **Force Save 처리**: co-editing 세션 유지 (version 증가 안 함)
+
+### 실제 코드 위치
+
+**Document.key 관리**:
+- `Document.java` - editorVersion 필드, getEditorKey()
+- `DocumentRepository.java` - findByFileNameAndDeletedAtIsNull()
+- `KeyUtils.java` - key 생성/검증
+- `DocumentService.java` - getEditorKey(), incrementEditorVersion()
+- `EditorController.java` - Service 사용
+- `CallbackController.java` - status별 분기 처리
+
+**MinIO Storage** (v2.0):
+- `MinioConfig.java` - MinioClient Bean 설정
+- `MinioStorageService.java` - 파일 업로드/다운로드/삭제/Presigned URL
+- `StorageException.java` - 스토리지 예외 처리
+- `MinioStorageServiceTest.java` - 13개 단위 테스트
+
+---
+
+## 📚 참고 자료
+
+- [OnlyOffice document.key 공식 문서](https://api.onlyoffice.com/docs/docs-api/usage-api/config/document/document/#key)
+- [OnlyOffice Callback Handler](https://api.onlyoffice.com/docs/docs-api/usage-api/callback-handler/)
+- [프로젝트 통합 가이드](docs/onlyoffice-integration-guide.md)
+
+**GitHub**: [onlyoffice-demo](https://github.com/taez224/onlyoffice-demo)
+
+**관련 PR**:
+- [#24 OnlyOffice document.key 관리 로직 개선](https://github.com/taez224/onlyoffice-demo/pull/24)
+- [#25 MinIO Storage Service 구현](https://github.com/taez224/onlyoffice-demo/pull/25)

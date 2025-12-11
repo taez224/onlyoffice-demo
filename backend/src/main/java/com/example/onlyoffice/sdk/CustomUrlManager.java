@@ -40,6 +40,7 @@ public class CustomUrlManager extends DefaultUrlManager {
         return UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
                 .path("/files/{fileName}")
                 .buildAndExpand(fileId)
+                .encode()  // URL 인코딩 필수
                 .toUriString();
     }
 
@@ -48,6 +49,7 @@ public class CustomUrlManager extends DefaultUrlManager {
         return UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
                 .path("/callback")
                 .queryParam("fileName", fileId)
+                .encode()  // URL 인코딩 필수
                 .toUriString();
     }
 

@@ -2,36 +2,45 @@
 
 Spring Boot + React 기반 ONLYOFFICE Document Server 연동 예제 프로젝트입니다.
 
+**✨ Type-safe ONLYOFFICE SDK 통합** - Java SDK를 활용한 안전하고 유지보수 가능한 구현
+
 ## 프로젝트 구조
 
 ```
 onlyoffice-demo/
-├── backend/                              # Spring Boot 백엔드
+├── backend/                                     # Spring Boot 백엔드
 │   ├── src/main/java/com/example/onlyoffice/
+│   │   ├── config/
+│   │   │   └── OnlyOfficeConfig.java           # SDK Beans 설정
 │   │   ├── controller/
-│   │   │   ├── EditorController.java    # 에디터 설정 API
-│   │   │   ├── CallbackController.java  # ONLYOFFICE 콜백 처리
-│   │   │   └── FileController.java      # 파일 다운로드 API
+│   │   │   ├── EditorController.java           # 에디터 설정 API
+│   │   │   ├── CallbackController.java         # ONLYOFFICE 콜백 처리 (SDK Callback 모델)
+│   │   │   └── FileController.java             # 파일 다운로드 API
+│   │   ├── sdk/
+│   │   │   ├── CustomSettingsManager.java      # SDK SettingsManager 구현
+│   │   │   ├── CustomDocumentManager.java      # SDK DocumentManager 구현
+│   │   │   └── CustomUrlManager.java           # SDK UrlManager 구현
 │   │   ├── service/
-│   │   │   └── DocumentService.java     # 파일 관리 서비스
+│   │   │   ├── DocumentService.java            # 파일 관리 서비스
+│   │   │   └── EditorConfigService.java        # SDK ConfigService 래퍼
 │   │   └── util/
-│   │       └── JwtManager.java          # JWT 토큰 생성/검증
+│   │       └── KeyUtils.java                   # 문서 키 유틸리티
 │   ├── src/main/resources/
-│   │   └── application.yml              # 애플리케이션 설정
-│   ├── storage/                         # 로컬 문서 저장소 (임시)
+│   │   └── application.yml                     # 애플리케이션 설정
+│   ├── storage/                                # 로컬 문서 저장소
 │   │   ├── sample.docx
 │   │   ├── sample.xlsx
 │   │   ├── sample.pptx
 │   │   └── sample.pdf
-│   └── build.gradle                     # Gradle 빌드 설정
+│   └── build.gradle                            # Gradle 빌드 설정 (ONLYOFFICE SDK)
 │
-└── frontend/                             # React 프론트엔드
+└── frontend/                                    # React 프론트엔드
     ├── src/
     │   ├── components/
-    │   │   └── Editor.tsx               # ONLYOFFICE 에디터 컴포넌트
-    │   ├── App.tsx                      # 메인 앱
-    │   └── main.tsx                     # 엔트리 포인트
-    ├── vite.config.ts                   # Vite 설정 (API 프록시)
+    │   │   └── Editor.tsx                      # ONLYOFFICE 에디터 컴포넌트
+    │   ├── App.tsx                             # 메인 앱
+    │   └── main.tsx                            # 엔트리 포인트
+    ├── vite.config.ts                          # Vite 설정 (API 프록시)
     └── package.json
 ```
 
@@ -59,6 +68,7 @@ onlyoffice-demo/
 - **Java 21**
 - **Spring Boot 3.3.0**
 - **Gradle** - 빌드 도구
+- **ONLYOFFICE Java SDK 1.7.0** - Type-safe Config & Callback 처리
 - **JJWT 0.11.5** - JWT 인증
 - **Lombok** - 보일러플레이트 코드 제거
 
