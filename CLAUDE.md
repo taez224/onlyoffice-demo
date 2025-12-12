@@ -1,88 +1,56 @@
-# ONLYOFFICE Document Editor Demo
+# Claude Code Review Guide
 
-Spring Boot + React application integrating ONLYOFFICE Document Server.
+## Project Snapshot
+- Spring Boot 3.3 (Java 21) backend + React 18/Vite frontend embedding ONLYOFFICE Document Server 9.1 via the Java SDK 1.7.0.
+- Storage is filesystem-based (`storage/`) and mounted for the Document Server container; docker-compose also provisions PostgreSQL + MinIO for future persistence.
+- JWT auth is enforced between backend and Document Server; `.env` defines shared secrets and infra credentials.
 
-**✨ Type-safe ONLYOFFICE SDK 1.7.0 Integration**
+## Architecture & Flow
+1. Frontend requests `GET /api/config?fileName=foo.docx`.
+2. Backend creates config via SDK `ConfigService`, signs it through `JwtManager`, and returns URLs pointing to `host.docker.internal:8080`.
+3. Document Server downloads `/files/{fileKey}`, users edit collaboratively, and callbacks hit `/callback?fileName=...`.
+4. Backend downloads the edited asset from the callback payload and overwrites `storage/{file}`.
+Ensure callback URLs remain reachable from inside Docker; regressions here block saving.
 
-## Architecture
-
-```
-┌─────────────┐
-│  React 18   │  Port 5173 - User interface (Vite)
-│  TypeScript │
-└──────┬──────┘
-       │
-┌──────┴──────┐
-│ Spring Boot │  Port 8080 - API & file storage
-│   Backend   │  + ONLYOFFICE SDK (Type-safe Config & Callbacks)
-└──────┬──────┘
-       │
-┌──────┴──────┐
-│ ONLYOFFICE  │  Port 9980 - Document editor
-│  (Docker)   │
-└─────────────┘
-```
-
-## Quick Start
-
+## Build & Test Commands
 ```bash
-# 0. Setup environment
-cp .env.example .env  # Edit passwords and JWT_SECRET
+# Infra
+cp .env.example .env
+docker-compose up -d && docker-compose logs -f onlyoffice-docs
 
-# 1. Start services (PostgreSQL + MinIO + ONLYOFFICE)
-docker-compose up -d
+# Backend
+cd backend
+./gradlew bootRun
+./gradlew test        # unit/integration suite
+./gradlew build       # fat JAR + verification
 
-# 2. Start backend (port 8080)
-cd backend && ./gradlew bootRun
-
-# 3. Start frontend (port 5173)
-cd frontend && pnpm install && pnpm dev
-
-# 4. Open browser
-http://localhost:5173?fileName=sample.docx
+# Frontend
+cd frontend
+pnpm install
+pnpm dev              # local dev server
+pnpm build && pnpm preview
+pnpm lint
 ```
+Call `http://localhost:5173?fileName=sample.docx` for smoke testing.
 
-## Project Structure
+## Coding & Design Conventions
+- Java uses layered `controller/service/sdk/util` packages, Lombok, four-space indent, PascalCase classes, camelCase methods, `/api/*` routes, and `KeyUtils` for sanitized doc keys.
+- TypeScript uses two-space indent, PascalCase component files, hooks-first ordering, and ESLint+tsc enforcement.
+- Favor SDK abstractions (`CustomSettingsManager`, `CustomDocumentManager`, `CustomUrlManager`) over ad-hoc JSON.
 
-- `backend/` - Spring Boot API (Java 21) with ONLYOFFICE SDK 1.7.0
-  - `backend/storage/` - Document files storage
-  - See `backend/CLAUDE.md` for SDK integration details
-- `frontend/` - React 18 + Vite (TypeScript)
-  - See `frontend/CLAUDE.md` for details
-- `docker-compose.yml` - PostgreSQL + MinIO + ONLYOFFICE
-- `.env.example` - Environment variables template
+## Review Priorities
+- **Config correctness**: verify document URLs, callback URLs, `key` generation, and JWT secret alignment (`onlyoffice.secret` vs `.env JWT_SECRET` vs docker-compose).
+- **Security**: ensure no plaintext secrets in code, restrict file names to prevent path traversal, and double-check MinIO/Postgres creds stay in env files.
+- **Persistence**: confirm modified documents land in `storage/` and that permissions suit Docker (use `ls -la storage/`).
+- **Error handling**: callbacks should handle SAVE vs FORCESAVE enums distinctly and return `{ "error": 0 }` on success.
+- **Frontend**: ensure query params are validated before hitting backend and that editor props map to backend config fields.
 
-## How It Works
+## Testing Expectations
+- Backend tests live in `backend/src/test/java`; mirror the source package, suffix with `Test`, and cover controller/service logic plus SDK helpers (see `CustomCallbackServiceTest`).
+- Frontend specs are being added (`*.test.tsx`); when touching UI, stub ONLYOFFICE config fetches and assert query handling.
+- For regressions, run `./gradlew test` and `pnpm lint` minimally; mention additional manual doc-edit verification for complex flows.
 
-1. Frontend requests editor config from backend
-2. Backend generates type-safe Config using SDK ConfigService
-3. SDK JwtManager signs the config with JWT
-4. Frontend renders ONLYOFFICE editor with config
-5. User edits document
-6. ONLYOFFICE sends type-safe Callback (Status enum: SAVE, FORCESAVE, etc.)
-7. Backend processes callback and saves document
-
-## Key Configuration
-
-### .env
-```env
-JWT_SECRET=<your-secret-key-min-32-chars>
-POSTGRES_PASSWORD=<your-password>
-MINIO_ROOT_PASSWORD=<your-password>
-```
-
-### backend/src/main/resources/application.yml
-```yaml
-server:
-  baseUrl: http://host.docker.internal:8080  # For Docker callback
-
-onlyoffice:
-  secret: <must-match-JWT_SECRET>  # From .env
-```
-
-### docker-compose.yml
-```yaml
-environment:
-  - JWT_SECRET=${JWT_SECRET}  # From .env
-```
-
+## Configuration & Risk Notes
+- `server.baseUrl` must point to `http://host.docker.internal:8080` when Dockerized; local dev can use `http://localhost:8080`.
+- Rotate JWT secrets with `openssl rand -hex 32` when sharing configs; never commit `.env`.
+- docker-compose currently exposes PostgreSQL/MinIO—flag any new ports, volume mappings, or elevation of privileges in reviews.
