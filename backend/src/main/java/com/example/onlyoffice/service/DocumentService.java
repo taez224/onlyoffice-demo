@@ -9,6 +9,7 @@ import com.example.onlyoffice.repository.DocumentRepository;
 import com.example.onlyoffice.util.KeyUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -20,6 +21,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URLConnection;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -32,6 +34,7 @@ public class DocumentService {
     private static final String DEFAULT_STORAGE_PREFIX = "documents";
     private static final String DEFAULT_UPLOADER = "anonymous";
     private static final String DEFAULT_CONTENT_TYPE = "application/octet-stream";
+    private static final Sort ACTIVE_DOCUMENT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
     private final DocumentRepository documentRepository;
     private final FileSecurityService fileSecurityService;
@@ -44,6 +47,11 @@ public class DocumentService {
 
     public Document uploadDocument(MultipartFile file) {
         return uploadDocument(file, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Document> getActiveDocuments() {
+        return documentRepository.findByStatusAndDeletedAtIsNull(DocumentStatus.ACTIVE, ACTIVE_DOCUMENT_SORT);
     }
 
     public Document uploadDocument(MultipartFile file, String createdBy) {
@@ -77,12 +85,14 @@ public class DocumentService {
 
         document = documentRepository.save(document);
 
+        boolean storageUploaded = false;
         try {
             storageService.uploadFile(file, storagePath);
+            storageUploaded = true;
             document.setStatus(DocumentStatus.ACTIVE);
             return documentRepository.save(document);
         } catch (Exception e) {
-            documentRepository.delete(document);
+            handleUploadFailure(document, storageUploaded);
             throw new DocumentUploadException("Upload failed for file " + sanitizedFilename, e);
         }
     }
@@ -163,6 +173,22 @@ public class DocumentService {
         } catch (Exception e) {
             log.error("Error downloading file from {}", downloadUrl, e);
             throw new RuntimeException("Failed to save document from URL", e);
+        }
+    }
+
+    private void handleUploadFailure(Document document, boolean storageUploaded) {
+        if (storageUploaded) {
+            try {
+                storageService.deleteFile(document.getStoragePath());
+            } catch (Exception cleanupException) {
+                log.warn("Failed to clean up storage object {} after upload failure", document.getStoragePath(), cleanupException);
+            }
+        }
+
+        try {
+            documentRepository.delete(document);
+        } catch (Exception deleteException) {
+            log.error("Failed to remove pending document {} during compensation", document.getFileKey(), deleteException);
         }
     }
 

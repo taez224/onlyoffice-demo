@@ -9,14 +9,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -100,6 +105,37 @@ class DocumentServiceTest {
                 .hasMessageContaining("Upload failed");
 
         verify(documentRepository).delete(saved.get());
+        verify(storageService, never()).deleteFile(anyString());
+    }
+
+    @Test
+    @DisplayName("DB 상태 변경 실패 시 MinIO 객체를 정리하고 레코드를 삭제한다")
+    void uploadDocument_cleansUpStorageWhenActivatingFails() {
+        when(multipartFile.isEmpty()).thenReturn(false);
+        when(multipartFile.getOriginalFilename()).thenReturn("cleanup.docx");
+        when(multipartFile.getSize()).thenReturn(2048L);
+        when(fileSecurityService.sanitizeFilename("cleanup.docx")).thenReturn("cleanup.docx");
+
+        AtomicReference<Document> savedDocument = new AtomicReference<>();
+        AtomicInteger saveCount = new AtomicInteger();
+        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> {
+            Document doc = invocation.getArgument(0);
+            if (doc.getId() == null) {
+                doc.setId(77L);
+                savedDocument.set(doc);
+            }
+            if (saveCount.incrementAndGet() == 2) {
+                throw new RuntimeException("db boom");
+            }
+            return doc;
+        });
+
+        assertThatThrownBy(() -> documentService.uploadDocument(multipartFile, "tester"))
+                .isInstanceOf(DocumentUploadException.class);
+
+        verify(storageService).uploadFile(multipartFile, savedDocument.get().getStoragePath());
+        verify(storageService).deleteFile(savedDocument.get().getStoragePath());
+        verify(documentRepository).delete(savedDocument.get());
     }
 
     @Test
@@ -146,6 +182,24 @@ class DocumentServiceTest {
         InputStream result = documentService.downloadDocumentStream(document.getFileKey());
 
         assertThat(result).isSameAs(inputStream);
+    }
+
+    @Test
+    @DisplayName("ACTIVE 상태 문서만 생성일 내림차순으로 조회한다")
+    void getActiveDocuments_returnsSortedActiveDocuments() {
+        Document document = buildDocument();
+        when(documentRepository.findByStatusAndDeletedAtIsNull(eq(DocumentStatus.ACTIVE), any(Sort.class)))
+                .thenReturn(List.of(document));
+
+        List<Document> documents = documentService.getActiveDocuments();
+
+        assertThat(documents).containsExactly(document);
+
+        ArgumentCaptor<Sort> sortCaptor = ArgumentCaptor.forClass(Sort.class);
+        verify(documentRepository).findByStatusAndDeletedAtIsNull(eq(DocumentStatus.ACTIVE), sortCaptor.capture());
+        Sort sort = sortCaptor.getValue();
+        assertThat(sort.getOrderFor("createdAt")).isNotNull();
+        assertThat(sort.getOrderFor("createdAt").getDirection()).isEqualTo(Sort.Direction.DESC);
     }
 
     private Document buildDocument() {
