@@ -1,6 +1,7 @@
 package com.example.onlyoffice.service;
 
 import com.example.onlyoffice.entity.Document;
+import com.example.onlyoffice.exception.DocumentNotFoundException;
 import com.example.onlyoffice.repository.DocumentRepository;
 import com.example.onlyoffice.util.KeyUtils;
 import jakarta.annotation.PostConstruct;
@@ -81,15 +82,105 @@ public class DocumentService {
         return serverBaseUrl;
     }
 
-    // ==================== ONLYOFFICE document.key 관련 ====================
+    // ==================== fileKey 기반 메서드 (신규) ====================
+
+    /**
+     * fileKey로 문서 조회
+     *
+     * @param fileKey 파일 고유 식별자 (UUID)
+     * @return 문서 Optional
+     */
+    public Optional<Document> findByFileKey(String fileKey) {
+        return documentRepository.findByFileKeyAndDeletedAtIsNull(fileKey);
+    }
+
+    /**
+     * fileKey로 ONLYOFFICE document.key 생성
+     *
+     * @param fileKey 파일 고유 식별자 (UUID)
+     * @return fileKey_v{version} 형식의 document.key
+     * @throws DocumentNotFoundException 문서를 찾을 수 없는 경우
+     */
+    public String getEditorKeyByFileKey(String fileKey) {
+        return documentRepository.findByFileKeyAndDeletedAtIsNull(fileKey)
+            .map(doc -> {
+                String key = KeyUtils.generateEditorKey(doc.getFileKey(), doc.getEditorVersion());
+                log.debug("Generated editor key for fileKey {}: {}", fileKey, key);
+                return key;
+            })
+            .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
+    }
+
+    /**
+     * fileKey로 문서 저장 후 editorVersion 증가
+     *
+     * @param fileKey 파일 고유 식별자 (UUID)
+     * @throws DocumentNotFoundException 문서를 찾을 수 없는 경우
+     */
+    public void incrementEditorVersionByFileKey(String fileKey) {
+        documentRepository.findByFileKeyAndDeletedAtIsNull(fileKey)
+            .ifPresentOrElse(
+                doc -> {
+                    int oldVersion = doc.getEditorVersion();
+                    doc.incrementEditorVersion();
+                    documentRepository.save(doc);
+                    log.info("Editor version incremented for fileKey {}: {} -> {}",
+                        fileKey, oldVersion, doc.getEditorVersion());
+                },
+                () -> {
+                    throw new DocumentNotFoundException("Document not found for fileKey: " + fileKey);
+                }
+            );
+    }
+
+    /**
+     * fileKey로 파일 시스템에서 파일 가져오기
+     *
+     * @param fileKey 파일 고유 식별자 (UUID)
+     * @return 파일 객체
+     * @throws DocumentNotFoundException 문서를 찾을 수 없는 경우
+     */
+    public File getFileByFileKey(String fileKey) {
+        Document doc = findByFileKey(fileKey)
+            .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
+
+        // storagePath에서 파일 가져오기
+        return this.rootLocation.resolve(doc.getStoragePath()).toFile();
+    }
+
+    /**
+     * fileKey 기반으로 URL에서 편집된 문서 다운로드 및 저장
+     *
+     * @param downloadUrl ONLYOFFICE에서 제공한 다운로드 URL
+     * @param fileKey 파일 고유 식별자 (UUID)
+     * @throws DocumentNotFoundException 문서를 찾을 수 없는 경우
+     */
+    public void saveDocumentFromUrlByFileKey(String downloadUrl, String fileKey) {
+        Document doc = findByFileKey(fileKey)
+            .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
+
+        log.info("Downloading file from {} for fileKey {}", downloadUrl, fileKey);
+        try (InputStream in = URI.create(downloadUrl).toURL().openStream()) {
+            Path destinationFile = this.rootLocation.resolve(doc.getStoragePath());
+            Files.copy(in, destinationFile, StandardCopyOption.REPLACE_EXISTING);
+            log.info("File saved successfully for fileKey: {}", fileKey);
+        } catch (Exception e) {
+            log.error("Error downloading file from {}", downloadUrl, e);
+            throw new RuntimeException("Failed to save document from URL", e);
+        }
+    }
+
+    // ==================== fileName 기반 메서드 (하위 호환성 - Deprecated) ====================
 
     /**
      * ONLYOFFICE document.key 생성
      * DB에 문서가 있으면 DB 기반 key 사용, 없으면 파일시스템 기반 fallback
      *
+     * @deprecated Use {@link #getEditorKeyByFileKey(String)} instead
      * @param fileName 파일명
      * @return 유효한 document.key
      */
+    @Deprecated
     public String getEditorKey(String fileName) {
         File file = getFile(fileName);
 
@@ -110,9 +201,11 @@ public class DocumentService {
     /**
      * 파일명으로 문서 조회
      *
+     * @deprecated Use {@link #findByFileKey(String)} instead
      * @param fileName 파일명
      * @return 문서 Optional
      */
+    @Deprecated
     public Optional<Document> findByFileName(String fileName) {
         return documentRepository.findByFileNameAndDeletedAtIsNull(fileName);
     }
@@ -121,8 +214,10 @@ public class DocumentService {
      * 문서 저장 후 editorVersion 증가
      * 편집 종료(status=2) 시 호출하여 다음 편집 세션을 위한 새 key 생성
      *
+     * @deprecated Use {@link #incrementEditorVersionByFileKey(String)} instead
      * @param fileName 파일명
      */
+    @Deprecated
     public void incrementEditorVersion(String fileName) {
         documentRepository.findByFileNameAndDeletedAtIsNull(fileName)
             .ifPresentOrElse(
@@ -140,9 +235,11 @@ public class DocumentService {
     /**
      * URL에서 편집된 문서 다운로드 및 저장
      *
+     * @deprecated Use {@link #saveDocumentFromUrlByFileKey(String, String)} instead
      * @param downloadUrl ONLYOFFICE에서 제공한 다운로드 URL
      * @param fileName 저장할 파일명
      */
+    @Deprecated
     public void saveDocumentFromUrl(String downloadUrl, String fileName) {
         log.info("Downloading file from {} to {}", downloadUrl, fileName);
         try (InputStream in = URI.create(downloadUrl).toURL().openStream()) {

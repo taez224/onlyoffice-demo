@@ -25,13 +25,13 @@ public class EditorController {
     /**
      * ONLYOFFICE 에디터 설정 반환
      *
-     * @param fileName 편집할 파일명
+     * @param fileKey 편집할 문서의 고유 식별자 (UUID)
      * @return ONLYOFFICE 에디터 설정 (config + documentServerUrl)
      */
     @GetMapping("/api/config")
     @ResponseBody
-    public Map<String, Object> getEditorConfig(@RequestParam("fileName") String fileName) {
-        log.info("Editor config requested for file: {}", fileName);
-        return editorConfigService.createEditorResponse(fileName);
+    public Map<String, Object> getEditorConfig(@RequestParam("fileKey") String fileKey) {
+        log.info("Editor config requested for fileKey: {}", fileKey);
+        return editorConfigService.createEditorResponseByFileKey(fileKey);
     }
 }

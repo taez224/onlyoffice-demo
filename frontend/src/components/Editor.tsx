@@ -3,17 +3,17 @@ import { DocumentEditor } from '@onlyoffice/document-editor-react';
 import axios from 'axios';
 
 interface EditorProps {
-    fileName: string;
+    fileKey: string;
 }
 
-const Editor: React.FC<EditorProps> = ({ fileName }) => {
+const Editor: React.FC<EditorProps> = ({ fileKey }) => {
     const [config, setConfig] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchConfig = async () => {
             try {
-                const response = await axios.get(`/api/config?fileName=${fileName}`);
+                const response = await axios.get(`/api/config?fileKey=${fileKey}`);
                 setConfig(response.data);
             } catch (error) {
                 console.error("Failed to fetch editor config", error);
@@ -23,7 +23,7 @@ const Editor: React.FC<EditorProps> = ({ fileName }) => {
         };
 
         fetchConfig();
-    }, [fileName]);
+    }, [fileKey]);
 
     if (loading) {
         return <div>Loading Editor...</div>;

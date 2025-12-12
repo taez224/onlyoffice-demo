@@ -39,18 +39,21 @@ public class CustomCallbackService extends DefaultCallbackService {
      * Document editing complete and ready for saving
      * - Save file from download URL
      * - Increment editor version (triggers new document key)
+     *
+     * @param fileId now represents fileKey (UUID)
      */
     @Override
     public void handlerSave(Callback callback, String fileId) throws Exception {
         String downloadUrl = callback.getUrl();
         if (downloadUrl == null || downloadUrl.isBlank()) {
-            log.error("Download URL is missing for SAVE callback, fileId: {}", fileId);
+            log.error("Download URL is missing for SAVE callback, fileKey: {}", fileId);
             throw new IllegalArgumentException("Download URL is required for SAVE");
         }
 
-        documentService.saveDocumentFromUrl(downloadUrl, fileId);
-        documentService.incrementEditorVersion(fileId);
-        log.info("Document saved and version incremented: {}", fileId);
+        // fileId is now fileKey (UUID)
+        documentService.saveDocumentFromUrlByFileKey(downloadUrl, fileId);
+        documentService.incrementEditorVersionByFileKey(fileId);
+        log.info("Document saved and version incremented for fileKey: {}", fileId);
     }
 
     /**
@@ -58,17 +61,20 @@ public class CustomCallbackService extends DefaultCallbackService {
      * Force save during co-editing session
      * - Save file from download URL
      * - Do NOT increment version (co-editing continues)
+     *
+     * @param fileId now represents fileKey (UUID)
      */
     @Override
     public void handlerForcesave(Callback callback, String fileId) throws Exception {
         String downloadUrl = callback.getUrl();
         if (downloadUrl == null || downloadUrl.isBlank()) {
-            log.error("Download URL is missing for FORCESAVE callback, fileId: {}", fileId);
+            log.error("Download URL is missing for FORCESAVE callback, fileKey: {}", fileId);
             throw new IllegalArgumentException("Download URL is required for FORCESAVE");
         }
 
-        documentService.saveDocumentFromUrl(downloadUrl, fileId);
-        log.info("Force save completed (version unchanged): {}", fileId);
+        // fileId is now fileKey (UUID)
+        documentService.saveDocumentFromUrlByFileKey(downloadUrl, fileId);
+        log.info("Force save completed (version unchanged) for fileKey: {}", fileId);
     }
 
     /**
