@@ -12,9 +12,9 @@ import org.springframework.web.util.UriComponentsBuilder;
  * Extends DefaultUrlManager to leverage SDK's URL management features
  * <p>
  * Overrides required methods for application-specific URLs:
- * - getFileUrl(): Returns file download URL using Spring's UriComponentsBuilder
- * - getCallbackUrl(): Returns callback URL with fileName parameter
- * - getGobackUrl(): Returns redirect URL after editing
+ * - getFileUrl(): Returns file download URL with fileKey (UUID) path variable
+ * - getCallbackUrl(): Returns callback URL with fileKey (UUID) query parameter
+ * - getGobackUrl(): Returns redirect URL with fileKey (UUID) query parameter
  * <p>
  * Inherited features from DefaultUrlManager:
  * - getDocumentServerUrl(): Loads from SettingsManager
@@ -36,8 +36,9 @@ public class CustomUrlManager extends DefaultUrlManager {
 
     @Override
     public String getFileUrl(String fileId) {
+        // fileId is now fileKey (UUID)
         return UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
-                .path("/files/{fileName}")
+                .path("/files/{fileKey}")
                 .buildAndExpand(fileId)
                 .encode()
                 .toUriString();
@@ -45,17 +46,19 @@ public class CustomUrlManager extends DefaultUrlManager {
 
     @Override
     public String getCallbackUrl(String fileId) {
+        // fileId is now fileKey (UUID)
         return UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
                 .path("/callback")
-                .queryParam("fileName", fileId)
+                .queryParam("fileKey", fileId)
                 .encode()
                 .toUriString();
     }
 
     @Override
     public String getGobackUrl(String fileId) {
-        // Return to document list
-        return serverBaseUrl + "/";
+        // fileId is now fileKey (UUID)
+        // Redirect to frontend with fileKey parameter
+        return serverBaseUrl + "/?fileKey=" + fileId;
     }
 
 }

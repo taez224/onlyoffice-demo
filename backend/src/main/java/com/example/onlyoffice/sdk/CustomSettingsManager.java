@@ -1,6 +1,7 @@
 package com.example.onlyoffice.sdk;
 
 import com.onlyoffice.manager.settings.DefaultSettingsManager;
+import com.onlyoffice.model.settings.SettingsConstants;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,18 +45,16 @@ public class CustomSettingsManager extends DefaultSettingsManager {
      */
     @PostConstruct
     public void init() {
-        // Document Server settings
-        setSetting("files.docservice.url.site", documentServerUrl);
-        setSetting("files.docservice.url.api", documentServerUrl + "/web-apps/apps/api/documents/api.js");
-        setSetting("files.docservice.url.preloader", documentServerUrl + "/web-apps/apps/api/documents/cache-scripts.html");
+        // Document Server settings (SDK constants)
+        setSetting(SettingsConstants.URL, documentServerUrl);
 
-        // Security settings
-        setSetting("files.docservice.secret", jwtSecret);
-        setSetting("files.docservice.secret.enable", "true");
-        setSetting("files.docservice.secret.header", "Authorization");
+        // Security settings (SDK constants)
+        setSetting(SettingsConstants.SECURITY_KEY, jwtSecret);
+        setSetting(SettingsConstants.SECURITY_HEADER, getSecurityHeader());
+        setSetting(SettingsConstants.SECURITY_PREFIX, getSecurityPrefix());
 
-        log.info("ONLYOFFICE settings initialized: documentServerUrl={}, serverBaseUrl={}",
-                documentServerUrl, serverBaseUrl);
+        log.info("ONLYOFFICE settings initialized: documentServerUrl={}, serverBaseUrl={}, securityEnabled={}",
+                documentServerUrl, serverBaseUrl, isSecurityEnabled());
     }
 
     @Override

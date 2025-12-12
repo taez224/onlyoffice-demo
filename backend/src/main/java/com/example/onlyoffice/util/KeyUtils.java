@@ -3,6 +3,7 @@ package com.example.onlyoffice.util;
 import org.springframework.util.DigestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -104,12 +105,27 @@ public final class KeyUtils {
     }
 
     /**
+     * UUID 기반 fileKey 생성 (신규 문서용)
+     *
+     * UUID는 충돌 위험이 없고 보안적으로 예측 불가능하여
+     * 문서의 고유 식별자로 적합합니다.
+     *
+     * @return UUID 기반 고유한 fileKey (예: "550e8400-e29b-41d4-a716-446655440000")
+     */
+    public static String generateFileKey() {
+        return UUID.randomUUID().toString();
+    }
+
+    /**
      * 파일명과 타임스탬프로 fileKey 생성 (신규 문서용)
      *
+     * @deprecated Use {@link #generateFileKey()} instead for UUID-based keys.
+     *             This method is kept for backward compatibility and migration.
      * @param fileName 파일명
      * @param timestamp 생성 시각 (밀리초)
      * @return 고유한 fileKey
      */
+    @Deprecated
     public static String generateFileKey(String fileName, long timestamp) {
         String base = sanitize(fileName) + "_" + timestamp;
 

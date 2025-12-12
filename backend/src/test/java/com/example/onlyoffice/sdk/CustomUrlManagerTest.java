@@ -36,29 +36,29 @@ class CustomUrlManagerTest {
     class GetFileUrl {
 
         @Test
-        @DisplayName("파일 다운로드 URL 생성")
+        @DisplayName("파일 다운로드 URL 생성 (fileKey 기반)")
         void shouldGenerateFileDownloadUrl() {
             // given
-            String fileId = "sample.docx";
+            String fileKey = "550e8400-e29b-41d4-a716-446655440000";
 
             // when
-            String result = urlManager.getFileUrl(fileId);
+            String result = urlManager.getFileUrl(fileKey);
 
             // then
-            assertThat(result).isEqualTo("http://localhost:8080/files/sample.docx");
+            assertThat(result).isEqualTo("http://localhost:8080/files/550e8400-e29b-41d4-a716-446655440000");
         }
 
         @Test
-        @DisplayName("공백이 포함된 파일명 URL 인코딩")
-        void shouldEncodeFileNameWithSpaces() {
+        @DisplayName("하이픈이 포함된 UUID fileKey URL 생성")
+        void shouldEncodeFileKeyWithHyphens() {
             // given
-            String fileId = "my file.docx";
+            String fileKey = "abc-123-def-456";
 
             // when
-            String result = urlManager.getFileUrl(fileId);
+            String result = urlManager.getFileUrl(fileKey);
 
             // then
-            assertThat(result).isEqualTo("http://localhost:8080/files/my%20file.docx");
+            assertThat(result).isEqualTo("http://localhost:8080/files/abc-123-def-456");
         }
     }
 
@@ -67,29 +67,29 @@ class CustomUrlManagerTest {
     class GetCallbackUrl {
 
         @Test
-        @DisplayName("콜백 URL 생성 (fileName 쿼리 파라미터 포함)")
-        void shouldGenerateCallbackUrlWithFileNameParam() {
+        @DisplayName("콜백 URL 생성 (fileKey 쿼리 파라미터 포함)")
+        void shouldGenerateCallbackUrlWithFileKeyParam() {
             // given
-            String fileId = "sample.docx";
+            String fileKey = "550e8400-e29b-41d4-a716-446655440000";
 
             // when
-            String result = urlManager.getCallbackUrl(fileId);
+            String result = urlManager.getCallbackUrl(fileKey);
 
             // then
-            assertThat(result).isEqualTo("http://localhost:8080/callback?fileName=sample.docx");
+            assertThat(result).isEqualTo("http://localhost:8080/callback?fileKey=550e8400-e29b-41d4-a716-446655440000");
         }
 
         @Test
-        @DisplayName("공백이 포함된 파일명 쿼리 파라미터 인코딩")
-        void shouldEncodeSpacesInQueryParam() {
+        @DisplayName("하이픈이 포함된 UUID fileKey 쿼리 파라미터")
+        void shouldEncodeHyphensInQueryParam() {
             // given
-            String fileId = "my file.docx";
+            String fileKey = "abc-123-def-456";
 
             // when
-            String result = urlManager.getCallbackUrl(fileId);
+            String result = urlManager.getCallbackUrl(fileKey);
 
             // then
-            assertThat(result).isEqualTo("http://localhost:8080/callback?fileName=my%20file.docx");
+            assertThat(result).isEqualTo("http://localhost:8080/callback?fileKey=abc-123-def-456");
         }
     }
 
@@ -98,27 +98,29 @@ class CustomUrlManagerTest {
     class GetGobackUrl {
 
         @Test
-        @DisplayName("문서 목록 페이지 URL 반환")
+        @DisplayName("문서 목록 페이지 URL 반환 (fileKey 쿼리 파라미터 포함)")
         void shouldReturnDocumentListUrl() {
             // given
-            String fileId = "sample.docx";
+            String fileKey = "550e8400-e29b-41d4-a716-446655440000";
 
             // when
-            String result = urlManager.getGobackUrl(fileId);
+            String result = urlManager.getGobackUrl(fileKey);
 
             // then
-            assertThat(result).isEqualTo("http://localhost:8080/");
+            assertThat(result).isEqualTo("http://localhost:8080/?fileKey=550e8400-e29b-41d4-a716-446655440000");
         }
 
         @Test
-        @DisplayName("fileId와 무관하게 동일한 URL 반환")
-        void shouldReturnSameUrlRegardlessOfFileId() {
+        @DisplayName("각 fileKey마다 고유한 URL 반환")
+        void shouldReturnDifferentUrlForDifferentFileKeys() {
             // when
-            String result1 = urlManager.getGobackUrl("file1.docx");
-            String result2 = urlManager.getGobackUrl("file2.xlsx");
+            String result1 = urlManager.getGobackUrl("abc-123");
+            String result2 = urlManager.getGobackUrl("def-456");
 
             // then
-            assertThat(result1).isEqualTo(result2);
+            assertThat(result1).isEqualTo("http://localhost:8080/?fileKey=abc-123");
+            assertThat(result2).isEqualTo("http://localhost:8080/?fileKey=def-456");
+            assertThat(result1).isNotEqualTo(result2);
         }
     }
 

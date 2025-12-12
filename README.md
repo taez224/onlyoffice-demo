@@ -203,7 +203,7 @@ http://localhost:5173?fileName=sample.docx
 | 메서드 | 엔드포인트 | 설명 |
 |--------|-----------|------|
 | `GET` | `/api/config?fileName={name}` | ONLYOFFICE 에디터 설정 JSON 반환 |
-| `GET` | `/files/{fileName}` | 파일 다운로드 (ONLYOFFICE가 호출) |
+| `GET` | `/files/{fileKey}` | 파일 다운로드 (ONLYOFFICE가 호출) |
 | `POST` | `/callback?fileName={name}` | 편집 완료 시 ONLYOFFICE가 호출하는 콜백 |
 
 ### 주요 흐름

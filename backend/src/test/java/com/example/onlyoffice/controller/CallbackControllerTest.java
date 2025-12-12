@@ -40,8 +40,8 @@ class CallbackControllerTest {
     private CustomSettingsManager settingsManager;
 
     private static final String CALLBACK_URL = "/callback";
-    private static final String FILE_NAME = "sample.docx";
-    private static final String DOCUMENT_KEY = "sampledocx_v1";
+    private static final String FILE_KEY = "550e8400-e29b-41d4-a716-446655440000";
+    private static final String DOCUMENT_KEY = "550e8400-e29b-41d4-a716-446655440000_v1";
     private static final String DOWNLOAD_URL = "http://localhost:9980/download/file123";
     private static final String JWT_TOKEN = "Bearer valid.jwt.token";
 
@@ -62,7 +62,7 @@ class CallbackControllerTest {
 
             // when & then
             mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileName", FILE_NAME)
+                            .param("fileKey", FILE_KEY)
                             .header("Authorization", JWT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(callbackJson))
@@ -71,7 +71,7 @@ class CallbackControllerTest {
 
             verify(settingsManager).getSecurityHeader();
             verify(callbackService).verifyCallback(any(Callback.class), eq(JWT_TOKEN));
-            verify(callbackService).processCallback(any(Callback.class), eq(FILE_NAME));
+            verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
 
         @Test
@@ -85,40 +85,20 @@ class CallbackControllerTest {
             when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
                     .thenReturn(callback);
             doThrow(new IllegalArgumentException("Download URL is required"))
-                    .when(callbackService).processCallback(any(Callback.class), eq(FILE_NAME));
+                    .when(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
 
             // when & then
             mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileName", FILE_NAME)
+                            .param("fileKey", FILE_KEY)
                             .header("Authorization", JWT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(callbackJson))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.error").value(1));
 
-            verify(callbackService).processCallback(any(Callback.class), eq(FILE_NAME));
+            verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
 
-        @Test
-        @DisplayName("fileName 파라미터 없으면 fallback 파일명 사용")
-        void shouldUseFallbackFileNameWhenParamMissing() throws Exception {
-            // given
-            Callback callback = createCallback(Status.SAVE, DOWNLOAD_URL);
-            String callbackJson = objectMapper.writeValueAsString(callback);
-
-            when(settingsManager.getSecurityHeader()).thenReturn("Authorization");
-            when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
-                    .thenReturn(callback);
-
-            // when & then
-            mockMvc.perform(post(CALLBACK_URL)
-                            .header("Authorization", JWT_TOKEN)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(callbackJson))
-                    .andExpect(status().isOk());
-
-            verify(callbackService).processCallback(any(Callback.class), anyString());
-        }
     }
 
     @Nested
@@ -138,7 +118,7 @@ class CallbackControllerTest {
 
             // when & then
             mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileName", FILE_NAME)
+                            .param("fileKey", FILE_KEY)
                             .header("Authorization", JWT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(callbackJson))
@@ -146,7 +126,7 @@ class CallbackControllerTest {
                     .andExpect(jsonPath("$.error").value(0));
 
             verify(callbackService).verifyCallback(any(Callback.class), eq(JWT_TOKEN));
-            verify(callbackService).processCallback(any(Callback.class), eq(FILE_NAME));
+            verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
     }
 
@@ -167,14 +147,14 @@ class CallbackControllerTest {
 
             // when & then
             mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileName", FILE_NAME)
+                            .param("fileKey", FILE_KEY)
                             .header("Authorization", JWT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(callbackJson))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.error").value(0));
 
-            verify(callbackService).processCallback(any(Callback.class), eq(FILE_NAME));
+            verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
     }
 
@@ -195,14 +175,14 @@ class CallbackControllerTest {
 
             // when & then
             mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileName", FILE_NAME)
+                            .param("fileKey", FILE_KEY)
                             .header("Authorization", JWT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(callbackJson))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.error").value(0));
 
-            verify(callbackService).processCallback(any(Callback.class), eq(FILE_NAME));
+            verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
     }
 
@@ -223,14 +203,14 @@ class CallbackControllerTest {
 
             // when & then
             mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileName", FILE_NAME)
+                            .param("fileKey", FILE_KEY)
                             .header("Authorization", JWT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(callbackJson))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.error").value(0));
 
-            verify(callbackService).processCallback(any(Callback.class), eq(FILE_NAME));
+            verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
 
         @Test
@@ -246,14 +226,14 @@ class CallbackControllerTest {
 
             // when & then
             mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileName", FILE_NAME)
+                            .param("fileKey", FILE_KEY)
                             .header("Authorization", JWT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(callbackJson))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.error").value(0));
 
-            verify(callbackService).processCallback(any(Callback.class), eq(FILE_NAME));
+            verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
     }
 
@@ -274,7 +254,7 @@ class CallbackControllerTest {
 
             // when & then
             mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileName", FILE_NAME)
+                            .param("fileKey", FILE_KEY)
                             .header("Authorization", "Bearer invalid.token")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(callbackJson))

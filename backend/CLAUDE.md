@@ -1,90 +1,50 @@
-# Backend - Spring Boot API
+# Backend – Spring Boot + ONLYOFFICE SDK
 
-**✨ ONLYOFFICE SDK 1.7.0 Integration - Type-safe Config & Callbacks**
+## Purpose & Stack
+- Java 21 + Spring Boot 3.3.0 providing REST APIs at `/api` plus `/files`/`/callback`.
+- Gradle builds the service; Lombok reduces boilerplate; JJWT + ONLYOFFICE Java SDK 1.7.0 handle JWT-secured editor configs.
+- `storage/` (alongside `build.gradle`) stores working documents; ensure Docker volume permissions allow read/write.
 
-> ONLYOFFICE SDK Github: https://github.com/ONLYOFFICE/docs-integration-sdk-java
-
-> ONLYOFFICE Integration Example Github: https://github.com/ONLYOFFICE/document-server-integration/tree/master/web/documentserver-example/java
-## Quick Start
-
+## Run & Test
 ```bash
 cd backend
-./gradlew bootRun  # Runs on port 8080
+./gradlew bootRun          # dev server on :8080
+./gradlew test             # JUnit 5 suite
+./gradlew build            # shaded jar + checks
 ```
+Before running, copy `.env.example` to `.env` at repo root and ensure `onlyoffice.secret` in `src/main/resources/application.yml` matches `JWT_SECRET`. When Dockerized, keep `server.baseUrl` at `http://host.docker.internal:8080`.
 
-## Key Files
+## Key Modules
+- `config/OnlyOfficeConfig.java`: wires SDK managers (Settings, Document, Url, Permission, User, Callback, Config) plus `EditorConfigService`.
+- `controller/EditorController.java`: `GET /api/config?fileKey=` returning SDK-generated config + token.
+- `controller/FileController.java`: exposes `/files/{fileKey}` for Document Server downloads.
+- `controller/CallbackController.java`: consumes SDK Callback model to download updated docs.
+- `service/DocumentService.java`: file I/O inside `storage/`.
+- `service/FileMigrationService.java`: utilities for migrating legacy assets (triggered via `MigrationController`).
+- `sdk/*`: overrides default SDK managers for custom URLs, document keys, permissions, and callbacks.
+- `util/KeyUtils.java`: sanitizes keys (timestamp/UUID) so Document Server versioning works.
 
-### SDK Integration (Type-safe)
-- `config/OnlyOfficeConfig.java` - SDK Beans configuration (SettingsManager, DocumentManager, UrlManager, JwtManager, ConfigService)
-- `sdk/CustomSettingsManager.java` - Provides application settings to SDK
-- `sdk/CustomDocumentManager.java` - Document key generation, format database
-- `sdk/CustomUrlManager.java` - File, callback, goback URL generation
-- `service/EditorConfigService.java` - SDK ConfigService wrapper
+## API Surface
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET /api/config?fileKey=` | Returns `{ documentServerUrl, config }`. Query param may be file name or UUID; service resolves metadata. |
+| `GET /files/{fileKey}` | Serves binary content with JWT validation. |
+| `POST /callback?fileKey=` | Handles SAVE/FORCESAVE, downloads edited doc from SDK payload URL, and overwrites storage. |
+| `POST /api/migrate` | (Optional tooling) bulk-imports files using `FileMigrationService`. |
 
-### Controllers & Services
-- `EditorController.java` - Returns type-safe editor config via SDK
-- `CallbackController.java` - Handles SDK Callback model (Status enum: SAVE, FORCESAVE, etc.)
-- `FileController.java` - Serves files to ONLYOFFICE
-- `DocumentService.java` - File I/O operations
-- `util/KeyUtils.java` - Document key sanitization
-- `application.yml` - Configuration
+## Testing Cues
+- Tests live under `src/test/java` mirroring the main packages (`controller`, `sdk`, `service`, `util`). Use descriptive method names (`shouldHandleForceSaveStatus`).
+- `CustomCallbackServiceTest`, `CustomDocumentManagerTest`, etc., already cover happy paths; extend them when adding logic (e.g., new permission modes or key rules).
+- Mock filesystem interactions via temporary directories; avoid touching real `storage/`.
 
-## API Endpoints
+## Review Checklist
+1. **Config validity** – `documentUrl`, `callbackUrl`, `key`, and `jwt` must align with Docker hostnames; ensure `CustomUrlManager` updates stay consistent with controllers.
+2. **Security** – reject path traversal (see `KeyUtils`), never log secrets, and keep `.env`-sourced properties outside version control.
+3. **Callbacks** – `CallbackController` should distinguish between `Status.SAVE`, `FORCESAVE`, errors, and return `{ "error": 0 }` on success.
+4. **Storage** – confirm overwrites happen atomically and that migrations or cleanups respect `storage.path`.
+5. **SDK upgrades** – prefer extending SDK managers rather than recreating DTOs; update `OnlyOfficeConfig` when new beans are required.
 
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /api/config?fileName=X` | Returns type-safe SDK Config object with JWT |
-| `GET /files/{fileName}` | File download (ONLYOFFICE calls this) |
-| `POST /callback?fileName=X` | Processes SDK Callback model (Status enum) |
-
-## Critical Configuration (application.yml)
-
-```yaml
-server:
-  baseUrl: http://host.docker.internal:8080  # Must be reachable from Docker
-
-onlyoffice:
-  url: http://localhost:9980
-  secret: <must-match-.env-JWT_SECRET>  # Min 32 chars, from .env file
-
-storage:
-  path: storage  # Relative to backend/ directory → backend/storage/
-```
-
-**Note**:
-- Storage path is relative to the backend directory. Files are stored in `backend/storage/`.
-- `onlyoffice.secret` must match the `JWT_SECRET` value in `.env` file.
-
-## Document Flow (SDK-based)
-
-1. Frontend requests config → EditorConfigService creates type-safe Config via SDK
-2. SDK ConfigService generates Config object with proper types
-3. SDK JwtManager signs the config automatically
-4. ONLYOFFICE fetches file → FileController serves from `backend/storage/`
-5. User edits and saves → ONLYOFFICE posts SDK Callback with Status enum
-6. CallbackController parses SDK Callback model (no more magic numbers!)
-7. Backend downloads edited file and saves to `backend/storage/`
-
-## Common Tasks
-
-**Add file type support**: SDK's DocumentManager provides format database - use `documentManager.isEditable(fileId)`, `isViewable()`, etc.
-
-**Debug callbacks**: Check `server.baseUrl` is reachable from Docker container. Callback uses SDK Callback model with Status enum.
-
-**JWT issues**:
-- Ensure `onlyoffice.secret` matches `docker-compose.yml` JWT_SECRET
-- SDK JwtManager handles signing/verification automatically
-- Check `CustomSettingsManager.getSetting("files.docservice.secret")`
-
-**Customize SDK Managers**:
-- `CustomSettingsManager` - Modify `getSetting()` to add new settings
-- `CustomDocumentManager` - Override `getDocumentKey()` for custom key logic
-- `CustomUrlManager` - Override URL generation methods (`getFileUrl()`, `getCallbackUrl()`)
-
-## SDK Benefits
-
-✅ **Type Safety** - Compile-time validation, no ClassCastException
-✅ **No Magic Numbers** - Status.SAVE instead of `status == 2`
-✅ **IDE Support** - Auto-completion for Config and Callback fields
-✅ **Format Database** - Built-in file type detection and conversion support
-✅ **Maintainability** - SDK updates handle API changes automatically
+## Troubleshooting
+- **JWT mismatch**: `onlyoffice.secret` (application.yml) must equal `JWT_SECRET` in `.env` and docker-compose.
+- **Callback failures**: check Docker logs (`docker-compose logs onlyoffice-docs`) and ensure `server.baseUrl` is reachable (`curl http://host.docker.internal:8080/api/health` if added).
+- **Permissions issues**: run `ls -la storage/` to verify host/containers share ownership; adjust volume mappings if callbacks cannot write edits.

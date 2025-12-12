@@ -1,88 +1,43 @@
-# Frontend - Next.js 16 + React 19
+# Frontend – React 18 + Vite
 
-## Quick Start
+## Purpose & Stack
+- Lightweight Vite + React 18 + TypeScript 5 client that embeds `@onlyoffice/document-editor-react` (v2.1.1) and fetches config from the Spring Boot backend.
+- Axios handles `/api/config` calls; styling is minimal (CSS modules in `App.css`/`index.css`).
 
+## Run, Build, Test
 ```bash
 cd frontend
-pnpm install
-pnpm dev  # Runs on port 3000
+pnpm install            # once
+pnpm dev                # http://localhost:5173
+pnpm build && pnpm preview
+pnpm lint               # eslint + typescript-eslint rules
 ```
-
-## Tech Stack
-
-- **Next.js 16** - React framework with App Router
-- **React 19** - UI library
-- **TypeScript 5** - Type safety
-- **Turbopack** - Fast bundler (built-in)
-- **TanStack Query** - Server state management
-- **TanStack Table** - Table UI
-- **shadcn/ui** - UI components (Tailwind CSS)
+Vite proxies `/api` to `http://localhost:8080` via `vite.config.ts`; adjust when backend host changes.
 
 ## Key Files
+- `src/main.tsx` – boots React with `<App />`.
+- `src/App.tsx` – reads `fileKey` from `window.location.search` and conditionally renders `<Editor />`.
+- `src/components/Editor.tsx` – client wrapper around `DocumentEditor`; fetches config via Axios and renders the SDK component with lifecycle hooks.
+- `src/assets/` – static assets (logos, etc.).
+- `index.html`, `vite.config.ts` – Vite entry and proxy configuration.
 
-- `app/page.tsx` - Document list page
-- `app/editor/[id]/page.tsx` - ONLYOFFICE editor page
-- `app/layout.tsx` - Root layout with QueryClient Provider
-- `components/Editor.tsx` - ONLYOFFICE editor component (Client Component)
+## Data Flow
+1. User opens `http://localhost:5173?fileKey=<uuid-or-name>`.
+2. `App.tsx` validates the query param and displays an error if absent.
+3. `Editor.tsx` issues `GET /api/config?fileKey=...` (proxied to backend) and stores `{ documentServerUrl, config }`.
+4. When loaded, `DocumentEditor` connects to the Document Server URL and renders the document UI.
 
-## Important: Client Components
+## Coding Guidelines
+- Keep React components functional with hooks; TypeScript props should be explicit (`interface EditorProps { fileKey: string }`).
+- Avoid storing secrets or backend URLs in the bundle; rely on the `/api` proxy or `import.meta.env` variables for overrides.
+- Document Editor needs full viewport height; maintain inline styles or move to CSS with `height: 100vh`.
+- Error and loading states must remain user-friendly (spinner + actionable message).
 
-ONLYOFFICE Document Editor **must** be a Client Component:
+## Testing Expectations
+- No formal UI tests exist yet; at minimum, run `pnpm lint` before commits.
+- When adding logic (e.g., multi-file dashboards), introduce Vitest + React Testing Library specs under `src/**/*.test.tsx` and mock Axios responses.
 
-```tsx
-'use client'  // Required!
-
-import { DocumentEditor } from '@onlyoffice/document-editor-react'
-```
-
-This is because ONLYOFFICE requires browser APIs that aren't available in Server Components.
-
-## Project Structure
-
-```
-app/
-├── layout.tsx              # Root layout + QueryClient
-├── page.tsx                # Document list (Server Component)
-└── editor/
-    └── [id]/
-        └── page.tsx        # Editor page (uses Client Component)
-
-components/
-├── Editor.tsx              # ONLYOFFICE wrapper (Client Component)
-├── DocumentTable.tsx       # TanStack Table
-└── UploadButton.tsx        # File upload
-
-hooks/
-├── useDocuments.ts         # Fetch document list
-├── useUploadDocument.ts    # Upload mutation
-└── useDeleteDocument.ts    # Delete mutation
-
-lib/
-└── api.ts                  # API client functions
-```
-
-## Commands
-
-```bash
-pnpm dev      # Development server (port 3000)
-pnpm build    # Production build
-pnpm start    # Start production server
-pnpm lint     # ESLint check
-```
-
-## API Integration
-
-Backend proxy is handled by Next.js config or environment variables:
-
-```typescript
-// lib/api.ts
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
-```
-
-## Common Tasks
-
-**Add new route**: Create file in `app/` directory (file-based routing)
-
-**Add Client Component**: Add `'use client'` directive at top of file
-
-**Fetch data**: Use TanStack Query hooks or Server Components with `fetch()`
+## Troubleshooting
+- **Config fetch fails**: check Vite proxy configuration and backend availability (`curl http://localhost:8080/api/config?fileKey=sample.docx`).
+- **Editor not loading**: ensure `DocumentEditor` receives both `documentServerUrl` and `config` fields; watch browser console for JWT errors.
+- **CORS/proxy issues**: update `vite.config.ts` `server.proxy['/api']` to the correct backend host/port.

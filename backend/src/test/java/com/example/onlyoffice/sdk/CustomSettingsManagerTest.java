@@ -1,5 +1,6 @@
 package com.example.onlyoffice.sdk;
 
+import com.onlyoffice.model.settings.SettingsConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -16,7 +17,8 @@ class CustomSettingsManagerTest {
     @BeforeEach
     void setUp() {
         settingsManager = new CustomSettingsManager();
-        // Set test values using reflection
+
+        // Set test values using reflection (inject @Value fields)
         ReflectionTestUtils.setField(settingsManager, "documentServerUrl", "http://localhost:9980");
         ReflectionTestUtils.setField(settingsManager, "jwtSecret", "test-secret-key-32-chars-long-min");
         ReflectionTestUtils.setField(settingsManager, "serverBaseUrl", "http://localhost:8080");
@@ -30,63 +32,44 @@ class CustomSettingsManagerTest {
     class GetSetting {
 
         @Test
-        @DisplayName("Document Server URL 설정 반환")
+        @DisplayName("Document Server URL 설정 반환 (SDK SettingsConstants.URL)")
         void shouldReturnDocumentServerUrl() {
             // when
-            String result = settingsManager.getSetting("files.docservice.url.site");
+            String result = settingsManager.getSetting(SettingsConstants.URL);
 
             // then
             assertThat(result).isEqualTo("http://localhost:9980");
         }
 
         @Test
-        @DisplayName("Document Server API URL 설정 반환")
-        void shouldReturnDocumentServerApiUrl() {
-            // when
-            String result = settingsManager.getSetting("files.docservice.url.api");
-
-            // then
-            assertThat(result).isEqualTo("http://localhost:9980/web-apps/apps/api/documents/api.js");
-        }
-
-        @Test
-        @DisplayName("Document Server Preloader URL 설정 반환")
-        void shouldReturnDocumentServerPreloaderUrl() {
-            // when
-            String result = settingsManager.getSetting("files.docservice.url.preloader");
-
-            // then
-            assertThat(result).isEqualTo("http://localhost:9980/web-apps/apps/api/documents/cache-scripts.html");
-        }
-
-        @Test
-        @DisplayName("JWT Secret 설정 반환")
+        @DisplayName("JWT Secret 설정 반환 (SDK SettingsConstants.SECURITY_KEY)")
         void shouldReturnJwtSecret() {
             // when
-            String result = settingsManager.getSetting("files.docservice.secret");
+            String result = settingsManager.getSetting(SettingsConstants.SECURITY_KEY);
 
             // then
             assertThat(result).isEqualTo("test-secret-key-32-chars-long-min");
         }
 
-        @Test
-        @DisplayName("JWT 활성화 설정 반환")
-        void shouldReturnJwtEnabled() {
-            // when
-            String result = settingsManager.getSetting("files.docservice.secret.enable");
-
-            // then
-            assertThat(result).isEqualTo("true");
-        }
 
         @Test
-        @DisplayName("JWT 헤더 설정 반환")
+        @DisplayName("JWT 헤더 설정 반환 (SDK SettingsConstants.SECURITY_HEADER)")
         void shouldReturnJwtHeader() {
             // when
-            String result = settingsManager.getSetting("files.docservice.secret.header");
+            String result = settingsManager.getSetting(SettingsConstants.SECURITY_HEADER);
 
             // then
             assertThat(result).isEqualTo("Authorization");
+        }
+
+        @Test
+        @DisplayName("JWT 프리픽스 설정 반환 (SDK SettingsConstants.SECURITY_PREFIX)")
+        void shouldReturnJwtPrefix() {
+            // when
+            String result = settingsManager.getSetting(SettingsConstants.SECURITY_PREFIX);
+
+            // then
+            assertThat(result).isEqualTo("Bearer "); // SDK default includes trailing space
         }
 
         @Test
@@ -118,20 +101,50 @@ class CustomSettingsManagerTest {
             // then
             assertThat(result).isEqualTo(settingValue);
         }
+    }
+
+    @Nested
+    @DisplayName("Security Settings (SDK)")
+    class SecuritySettings {
 
         @Test
-        @DisplayName("런타임 설정이 application.yml 설정보다 우선")
-        void shouldPrioritizeRuntimeSettingOverApplicationSetting() {
-            // given
-            String settingName = "files.docservice.url.site";
-            String overrideValue = "http://override:9980";
-
+        @DisplayName("isSecurityEnabled: SECURITY_KEY가 설정되어 있으면 true 반환")
+        void shouldReturnTrueWhenSecurityKeyIsSet() {
             // when
-            settingsManager.setSetting(settingName, overrideValue);
-            String result = settingsManager.getSetting(settingName);
+            boolean result = settingsManager.isSecurityEnabled();
 
             // then
-            assertThat(result).isEqualTo(overrideValue);
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        @DisplayName("getSecurityKey: SECURITY_KEY 값 반환")
+        void shouldReturnSecurityKey() {
+            // when
+            String result = settingsManager.getSecurityKey();
+
+            // then
+            assertThat(result).isEqualTo("test-secret-key-32-chars-long-min");
+        }
+
+        @Test
+        @DisplayName("getSecurityHeader: 기본값 'Authorization' 반환")
+        void shouldReturnSecurityHeader() {
+            // when
+            String result = settingsManager.getSecurityHeader();
+
+            // then
+            assertThat(result).isEqualTo("Authorization");
+        }
+
+        @Test
+        @DisplayName("getSecurityPrefix: SDK 기본값 'Bearer ' 반환 (뒤에 공백 포함)")
+        void shouldReturnSecurityPrefix() {
+            // when
+            String result = settingsManager.getSecurityPrefix();
+
+            // then
+            assertThat(result).isEqualTo("Bearer "); // SDK default includes trailing space
         }
     }
 }

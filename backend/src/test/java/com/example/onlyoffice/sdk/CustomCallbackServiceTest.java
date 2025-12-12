@@ -32,7 +32,7 @@ class CustomCallbackServiceTest {
 
     private CustomCallbackService customCallbackService;
 
-    private static final String FILE_NAME = "sample.docx";
+    private static final String FILE_KEY = "sampledocx";
     private static final String DOCUMENT_KEY = "sampledocx_v1";
     private static final String DOWNLOAD_URL = "http://localhost:9980/download/file123";
 
@@ -52,16 +52,16 @@ class CustomCallbackServiceTest {
         Callback callback = createCallback(Status.SAVE, DOWNLOAD_URL);
 
         // when
-        customCallbackService.handlerSave(callback, FILE_NAME);
+        customCallbackService.handlerSave(callback, FILE_KEY);
 
         // then
-        verify(documentService).saveDocumentFromUrl(DOWNLOAD_URL, FILE_NAME);
-        verify(documentService).incrementEditorVersion(FILE_NAME);
+        verify(documentService).saveDocumentFromUrlByFileKey(DOWNLOAD_URL, FILE_KEY);
+        verify(documentService).incrementEditorVersionByFileKey(FILE_KEY);
 
         // 호출 순서 검증 (save → increment)
         InOrder inOrder = inOrder(documentService);
-        inOrder.verify(documentService).saveDocumentFromUrl(DOWNLOAD_URL, FILE_NAME);
-        inOrder.verify(documentService).incrementEditorVersion(FILE_NAME);
+        inOrder.verify(documentService).saveDocumentFromUrlByFileKey(DOWNLOAD_URL, FILE_KEY);
+        inOrder.verify(documentService).incrementEditorVersionByFileKey(FILE_KEY);
     }
 
     @Test
@@ -71,12 +71,12 @@ class CustomCallbackServiceTest {
         Callback callback = createCallback(Status.SAVE, null);
 
         // when & then
-        assertThatThrownBy(() -> customCallbackService.handlerSave(callback, FILE_NAME))
+        assertThatThrownBy(() -> customCallbackService.handlerSave(callback, FILE_KEY))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Download URL is required");
 
-        verify(documentService, never()).saveDocumentFromUrl(anyString(), anyString());
-        verify(documentService, never()).incrementEditorVersion(anyString());
+        verify(documentService, never()).saveDocumentFromUrlByFileKey(anyString(), anyString());
+        verify(documentService, never()).incrementEditorVersionByFileKey(anyString());
     }
 
     @Test
@@ -86,12 +86,12 @@ class CustomCallbackServiceTest {
         Callback callback = createCallback(Status.FORCESAVE, DOWNLOAD_URL);
 
         // when
-        customCallbackService.handlerForcesave(callback, FILE_NAME);
+        customCallbackService.handlerForcesave(callback, FILE_KEY);
 
         // then
-        verify(documentService).saveDocumentFromUrl(DOWNLOAD_URL, FILE_NAME);
+        verify(documentService).saveDocumentFromUrlByFileKey(DOWNLOAD_URL, FILE_KEY);
         // CRITICAL: 버전 증가 호출되지 않음 검증
-        verify(documentService, never()).incrementEditorVersion(anyString());
+        verify(documentService, never()).incrementEditorVersionByFileKey(anyString());
     }
 
     @Test
@@ -101,11 +101,11 @@ class CustomCallbackServiceTest {
         Callback callback = createCallback(Status.FORCESAVE, null);
 
         // when & then
-        assertThatThrownBy(() -> customCallbackService.handlerForcesave(callback, FILE_NAME))
+        assertThatThrownBy(() -> customCallbackService.handlerForcesave(callback, FILE_KEY))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Download URL is required");
 
-        verify(documentService, never()).saveDocumentFromUrl(anyString(), anyString());
+        verify(documentService, never()).saveDocumentFromUrlByFileKey(anyString(), anyString());
     }
 
     @Test
@@ -116,17 +116,17 @@ class CustomCallbackServiceTest {
         Callback closedCallback = createCallback(Status.CLOSED, null);
 
         // when
-        customCallbackService.handlerEditing(editingCallback, FILE_NAME);
-        customCallbackService.handlerClosed(closedCallback, FILE_NAME);
+        customCallbackService.handlerEditing(editingCallback, FILE_KEY);
+        customCallbackService.handlerClosed(closedCallback, FILE_KEY);
 
         // then: 어떤 DocumentService 메서드도 호출되지 않음
-        verify(documentService, never()).saveDocumentFromUrl(anyString(), anyString());
-        verify(documentService, never()).incrementEditorVersion(anyString());
+        verify(documentService, never()).saveDocumentFromUrlByFileKey(anyString(), anyString());
+        verify(documentService, never()).incrementEditorVersionByFileKey(anyString());
 
         // 예외도 발생하지 않음
         assertThatCode(() -> {
-            customCallbackService.handlerEditing(editingCallback, FILE_NAME);
-            customCallbackService.handlerClosed(closedCallback, FILE_NAME);
+            customCallbackService.handlerEditing(editingCallback, FILE_KEY);
+            customCallbackService.handlerClosed(closedCallback, FILE_KEY);
         }).doesNotThrowAnyException();
     }
 
@@ -138,17 +138,17 @@ class CustomCallbackServiceTest {
         Callback forcesaveCorruptedCallback = createCallback(Status.FORCESAVE_CORRUPTED, null);
 
         // when
-        customCallbackService.handlerSaveCorrupted(saveCorruptedCallback, FILE_NAME);
-        customCallbackService.handlerForcesaveCurrupted(forcesaveCorruptedCallback, FILE_NAME);
+        customCallbackService.handlerSaveCorrupted(saveCorruptedCallback, FILE_KEY);
+        customCallbackService.handlerForcesaveCurrupted(forcesaveCorruptedCallback, FILE_KEY);
 
         // then: 어떤 DocumentService 메서드도 호출되지 않음
-        verify(documentService, never()).saveDocumentFromUrl(anyString(), anyString());
-        verify(documentService, never()).incrementEditorVersion(anyString());
+        verify(documentService, never()).saveDocumentFromUrlByFileKey(anyString(), anyString());
+        verify(documentService, never()).incrementEditorVersionByFileKey(anyString());
 
         // 예외도 발생하지 않음
         assertThatCode(() -> {
-            customCallbackService.handlerSaveCorrupted(saveCorruptedCallback, FILE_NAME);
-            customCallbackService.handlerForcesaveCurrupted(forcesaveCorruptedCallback, FILE_NAME);
+            customCallbackService.handlerSaveCorrupted(saveCorruptedCallback, FILE_KEY);
+            customCallbackService.handlerForcesaveCurrupted(forcesaveCorruptedCallback, FILE_KEY);
         }).doesNotThrowAnyException();
     }
 

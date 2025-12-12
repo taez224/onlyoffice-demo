@@ -1,12 +1,8 @@
 package com.example.onlyoffice.config;
 
-import com.example.onlyoffice.sdk.CustomDocumentManager;
 import com.example.onlyoffice.sdk.CustomSettingsManager;
-import com.example.onlyoffice.sdk.CustomUrlManager;
 import com.onlyoffice.manager.security.DefaultJwtManager;
 import com.onlyoffice.manager.security.JwtManager;
-import com.onlyoffice.service.documenteditor.config.ConfigService;
-import com.onlyoffice.service.documenteditor.config.DefaultConfigService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +15,9 @@ import org.springframework.context.annotation.Configuration;
  * - CustomSettingsManager
  * - CustomDocumentManager
  * - CustomUrlManager
+ * - CustomConfigService (extends DefaultConfigService with Permission & User support)
+ * - CustomPermissionManager
+ * - CustomUserManager
  * - CustomCallbackService (extends DefaultCallbackService)
  * <p>
  * They are injected directly into @Bean methods as parameters.
@@ -37,20 +36,7 @@ public class OnlyOfficeConfig {
         return new DefaultJwtManager(settingsManager);
     }
 
-    /**
-     * ConfigService Bean
-     * Creates editor configuration objects
-     */
-    @Bean
-    public ConfigService configService(
-            CustomDocumentManager documentManager,
-            CustomUrlManager urlManager,
-            JwtManager jwtManager,
-            CustomSettingsManager settingsManager) {
-        log.info("Initializing ONLYOFFICE ConfigService");
-        return new DefaultConfigService(documentManager, urlManager, jwtManager, settingsManager);
-    }
-
     // Note: CallbackService is provided by CustomCallbackService (@Component)
+    // Note: ConfigService is provided by CustomConfigService (@Component)
     // No need to define it here - Spring auto-wires it
 }
