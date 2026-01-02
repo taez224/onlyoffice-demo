@@ -6,14 +6,19 @@ interface EditorProps {
     fileKey: string;
 }
 
+interface EditorConfigResponse {
+    documentServerUrl: string;
+    config: Record<string, unknown>;
+}
+
 const Editor: React.FC<EditorProps> = ({ fileKey }) => {
-    const [config, setConfig] = useState<any>(null);
+    const [config, setConfig] = useState<EditorConfigResponse | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchConfig = async () => {
             try {
-                const response = await axios.get(`/api/config?fileKey=${fileKey}`);
+                const response = await axios.get<EditorConfigResponse>(`/api/config?fileKey=${fileKey}`);
                 setConfig(response.data);
             } catch (error) {
                 console.error("Failed to fetch editor config", error);
