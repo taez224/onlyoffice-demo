@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Migration Controller
  * 기존 파일들을 Document 레코드로 마이그레이션하는 관리자용 엔드포인트
+ *
+ * TODO: 인증/인가 구현 시 관리자 권한 검증 추가 필요
+ *       - @PreAuthorize("hasRole('ADMIN')") 또는 Spring Security 설정으로 보호
  */
 @Slf4j
 @RestController

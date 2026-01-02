@@ -183,18 +183,37 @@ pnpm dev
 
 Frontend가 `http://localhost:5173`에서 실행됩니다.
 
-### 6단계: 문서 편집기 열기
+### 6단계: 기존 파일 마이그레이션 (최초 1회)
 
-브라우저에서 다음 URL로 접속합니다:
+기존 `storage/` 디렉터리의 파일들을 데이터베이스에 등록합니다:
+
+```bash
+curl -X POST http://localhost:8080/api/admin/migration/files
+```
+
+마이그레이션 결과에서 각 파일의 fileKey(UUID)를 확인할 수 있습니다.
+
+### 7단계: 문서 편집기 열기
+
+브라우저에서 fileKey를 사용하여 접속합니다:
 
 ```
-http://localhost:5173?fileName=sample.docx
+http://localhost:5173?fileKey={마이그레이션에서 받은 UUID}
 ```
 
-다른 샘플 파일도 테스트할 수 있습니다:
-- `http://localhost:5173?fileName=sample.xlsx`
-- `http://localhost:5173?fileName=sample.pptx`
-- `http://localhost:5173?fileName=sample.pdf`
+**예제:**
+```
+http://localhost:5173?fileKey=550e8400-e29b-41d4-a716-446655440000
+```
+
+**fileKey 확인 방법:**
+- 마이그레이션 API 응답에서 확인
+- Backend 로그에서 확인
+- 또는 데이터베이스 직접 조회:
+  ```bash
+  docker-compose exec postgres psql -U demo -d onlyoffice_demo \
+    -c "SELECT file_key, file_name FROM documents WHERE deleted_at IS NULL;"
+  ```
 
 ## API 엔드포인트
 
@@ -202,9 +221,10 @@ http://localhost:5173?fileName=sample.docx
 
 | 메서드 | 엔드포인트 | 설명 |
 |--------|-----------|------|
-| `GET` | `/api/config?fileName={name}` | ONLYOFFICE 에디터 설정 JSON 반환 |
-| `GET` | `/files/{fileKey}` | 파일 다운로드 (ONLYOFFICE가 호출) |
-| `POST` | `/callback?fileName={name}` | 편집 완료 시 ONLYOFFICE가 호출하는 콜백 |
+| `GET` | `/api/config?fileKey={uuid}` | ONLYOFFICE 에디터 설정 JSON 반환 (fileKey는 Document의 UUID) |
+| `GET` | `/files/{fileKey}` | 파일 다운로드 (ONLYOFFICE가 호출, fileKey는 UUID) |
+| `POST` | `/callback?fileKey={uuid}` | 편집 완료 시 ONLYOFFICE가 호출하는 콜백 |
+| `POST` | `/api/admin/migration/files` | 기존 storage/ 파일을 Document 레코드로 마이그레이션 (관리자용) |
 
 ### 주요 흐름
 
@@ -216,9 +236,9 @@ sequenceDiagram
     participant ONLYOFFICE as ONLYOFFICE<br/>Document Server
     participant Storage as 파일 저장소<br/>(storage/)
 
-    User->>Browser: http://localhost:5173?fileName=sample.docx 접속
-    Browser->>Backend: GET /api/config?fileName=sample.docx
-    Backend->>Storage: 파일 존재 확인
+    User->>Browser: http://localhost:5173?fileKey={uuid} 접속
+    Browser->>Backend: GET /api/config?fileKey={uuid}
+    Backend->>Storage: fileKey로 파일 존재 확인
     Storage-->>Backend: 파일 정보 반환
     Backend->>Backend: 에디터 설정 JSON 생성<br/>(documentType, url, callbackUrl, JWT)
     Backend-->>Browser: 설정 JSON 반환
@@ -226,8 +246,8 @@ sequenceDiagram
     Browser->>Browser: DocumentEditor 컴포넌트 렌더링
     Browser->>ONLYOFFICE: 에디터 초기화 (config 전달)
 
-    ONLYOFFICE->>Backend: GET /files/sample.docx
-    Backend->>Storage: 파일 읽기
+    ONLYOFFICE->>Backend: GET /files/{fileKey}
+    Backend->>Storage: fileKey로 파일 읽기
     Storage-->>Backend: 파일 데이터
     Backend-->>ONLYOFFICE: 파일 전송
 
@@ -235,7 +255,7 @@ sequenceDiagram
     User->>ONLYOFFICE: 문서 편집
 
     User->>ONLYOFFICE: 완료 (에디터 종료 또는 Force Save)
-    ONLYOFFICE->>Backend: POST /callback?fileName=sample.docx<br/>(status=2, downloadUrl)
+    ONLYOFFICE->>Backend: POST /callback?fileKey={uuid}<br/>(status=2, downloadUrl)
     Backend->>ONLYOFFICE: 편집된 파일 다운로드 (downloadUrl)
     ONLYOFFICE-->>Backend: 파일 데이터
     Backend->>Storage: 파일 저장 (덮어쓰기)
