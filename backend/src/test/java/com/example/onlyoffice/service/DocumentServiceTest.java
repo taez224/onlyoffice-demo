@@ -25,15 +25,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("DocumentService Saga 단위 테스트")
@@ -104,12 +97,13 @@ class DocumentServiceTest {
                 .isInstanceOf(DocumentUploadException.class)
                 .hasMessageContaining("Upload failed");
 
-        verify(documentRepository).delete(saved.get());
+        // DB 롤백은 Spring @Transactional이 자동으로 처리하므로 delete() 호출 불필요
+        // MinIO 업로드 실패 시에는 스토리지 삭제도 필요 없음
         verify(storageService, never()).deleteFile(anyString());
     }
 
     @Test
-    @DisplayName("DB 상태 변경 실패 시 MinIO 객체를 정리하고 레코드를 삭제한다")
+    @DisplayName("DB 상태 변경 실패 시 MinIO 객체를 정리한다")
     void uploadDocument_cleansUpStorageWhenActivatingFails() {
         when(multipartFile.isEmpty()).thenReturn(false);
         when(multipartFile.getOriginalFilename()).thenReturn("cleanup.docx");
@@ -133,9 +127,10 @@ class DocumentServiceTest {
         assertThatThrownBy(() -> documentService.uploadDocument(multipartFile, "tester"))
                 .isInstanceOf(DocumentUploadException.class);
 
+        // MinIO 업로드는 성공했으므로 보상 트랜잭션으로 MinIO 파일 삭제
         verify(storageService).uploadFile(multipartFile, savedDocument.get().getStoragePath());
         verify(storageService).deleteFile(savedDocument.get().getStoragePath());
-        verify(documentRepository).delete(savedDocument.get());
+        // DB 롤백은 Spring @Transactional이 자동으로 처리하므로 delete() 호출 불필요
     }
 
     @Test

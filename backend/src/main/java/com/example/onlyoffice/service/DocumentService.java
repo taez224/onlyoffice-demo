@@ -35,6 +35,8 @@ public class DocumentService {
     private static final String DEFAULT_UPLOADER = "anonymous";
     private static final String DEFAULT_CONTENT_TYPE = "application/octet-stream";
     private static final Sort ACTIVE_DOCUMENT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+    private static final int CONNECTION_TIMEOUT_MS = 10_000; // 10 seconds
+    private static final int READ_TIMEOUT_MS = 60_000; // 60 seconds
 
     private final DocumentRepository documentRepository;
     private final FileSecurityService fileSecurityService;
@@ -47,7 +49,7 @@ public class DocumentService {
 
     /**
      * 문서 업로드 (생성자 미지정).
-     * 
+     *
      * @param file 업로드할 파일
      * @return 업로드된 문서
      * @see #uploadDocument(MultipartFile, String)
@@ -58,14 +60,14 @@ public class DocumentService {
 
     /**
      * ACTIVE 상태의 모든 문서를 생성일 내림차순으로 조회합니다.
-     * 
+     *
      * <p>조회 조건:</p>
      * <ul>
      *   <li>상태: {@link DocumentStatus#ACTIVE}</li>
      *   <li>삭제 여부: soft delete되지 않음 (deletedAt IS NULL)</li>
      *   <li>정렬: 생성일 내림차순 (최신순)</li>
      * </ul>
-     * 
+     *
      * @return ACTIVE 상태의 문서 목록 (최신순)
      * @see DocumentRepository#findByStatusAndDeletedAtIsNull(DocumentStatus, Sort)
      */
@@ -76,7 +78,7 @@ public class DocumentService {
 
     /**
      * 문서 업로드 Saga 패턴 구현.
-     * 
+     *
      * <p><b>Saga Steps:</b></p>
      * <ol>
      *   <li><b>파일 검증</b>: {@link FileSecurityService}로 보안 검사 수행</li>
@@ -84,13 +86,13 @@ public class DocumentService {
      *   <li><b>MinIO 업로드</b>: 실제 파일을 스토리지에 업로드</li>
      *   <li><b>상태 ACTIVE 변경</b>: 업로드 완료 후 문서를 ACTIVE 상태로 변경</li>
      * </ol>
-     * 
+     *
      * <p><b>보상 트랜잭션(Compensation):</b></p>
      * <ul>
-     *   <li>MinIO 업로드 실패 → DB 레코드 삭제</li>
-     *   <li>상태 변경 실패 → MinIO 파일 삭제 + DB 레코드 삭제</li>
+     *   <li>MinIO 업로드 실패 → DB 자동 롤백 (Spring @Transactional)</li>
+     *   <li>상태 변경 실패 → MinIO 파일 삭제 + DB 자동 롤백 (Spring @Transactional)</li>
      * </ul>
-     * 
+     *
      * @param file      업로드할 파일
      * @param createdBy 생성자 ID (null일 경우 "anonymous")
      * @return 업로드된 ACTIVE 상태의 문서
@@ -136,7 +138,7 @@ public class DocumentService {
             // Step 3: MinIO 업로드
             storageService.uploadFile(file, storagePath);
             storageUploaded = true;
-            
+
             // Step 4: 상태를 ACTIVE로 변경
             document.setStatus(DocumentStatus.ACTIVE);
             return documentRepository.save(document);
@@ -149,26 +151,26 @@ public class DocumentService {
 
     /**
      * 문서 삭제 Saga 패턴 구현 (비관적 락 적용).
-     * 
+     *
      * <p><b>Saga Steps:</b></p>
      * <ol>
      *   <li><b>비관적 락 조회</b>: PESSIMISTIC_WRITE 락으로 동시 수정 방지 (타임아웃 3초)</li>
      *   <li><b>Soft Delete (DB)</b>: 상태를 DELETED로 변경, deletedAt 타임스탬프 설정</li>
      *   <li><b>MinIO 파일 삭제</b>: 스토리지에서 실제 파일 제거</li>
      * </ol>
-     * 
+     *
      * <p><b>보상 트랜잭션(Compensation):</b></p>
      * <ul>
      *   <li>MinIO 삭제 실패 → DB 상태를 ACTIVE로 복구, deletedAt을 NULL로 초기화</li>
      * </ul>
-     * 
+     *
      * <p><b>동시성 제어:</b></p>
      * <ul>
      *   <li>비관적 락(PESSIMISTIC_WRITE)으로 삭제 중 다른 트랜잭션의 수정 차단</li>
      *   <li>3초 타임아웃으로 데드락 방지</li>
      *   <li>이미 삭제된 문서는 조기 반환 (멱등성 보장)</li>
      * </ul>
-     * 
+     *
      * @param id 삭제할 문서 ID
      * @throws DocumentNotFoundException 문서가 존재하지 않을 경우
      * @throws DocumentDeleteException   MinIO 삭제 실패 시 (보상 트랜잭션 실행 후 발생)
@@ -234,6 +236,8 @@ public class DocumentService {
 
         try {
             URLConnection connection = URI.create(downloadUrl).toURL().openConnection();
+            connection.setConnectTimeout(CONNECTION_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
             long contentLength = connection.getContentLengthLong();
             String contentType = connection.getContentType();
             if (!StringUtils.hasText(contentType)) {
@@ -261,15 +265,19 @@ public class DocumentService {
 
     /**
      * 업로드 실패 시 보상 트랜잭션을 실행합니다.
-     * 
+     *
      * <p><b>보상 전략:</b></p>
      * <ul>
-     *   <li>MinIO 업로드 성공 후 DB 저장 실패 → MinIO 파일 삭제 + DB 레코드 삭제</li>
-     *   <li>MinIO 업로드 실패 → DB 레코드만 삭제</li>
+     *   <li>MinIO 업로드 성공 후 실패 → MinIO 파일 삭제 (수동)</li>
+     *   <li>DB 레코드 → Spring @Transactional 자동 롤백으로 처리 (삭제 불필요)</li>
      * </ul>
-     * 
-     * @param document         저장된 PENDING 상태의 문서
-     * @param storageUploaded  MinIO 업로드 성공 여부
+     *
+     * <p><b>Note:</b> uploadDocument()는 @Transactional 메서드이므로,
+     * 예외 발생 시 Spring이 자동으로 DB 트랜잭션을 롤백합니다.
+     * 따라서 DB cleanup은 불필요하며, MinIO cleanup만 수동으로 처리합니다.</p>
+     *
+     * @param document        저장된 PENDING 상태의 문서
+     * @param storageUploaded MinIO 업로드 성공 여부
      */
     private void handleUploadFailure(Document document, boolean storageUploaded) {
         if (storageUploaded) {
@@ -281,12 +289,10 @@ public class DocumentService {
             }
         }
 
-        // DB 레코드 삭제
-        try {
-            documentRepository.delete(document);
-        } catch (Exception deleteException) {
-            log.error("Failed to remove pending document {} during compensation", document.getFileKey(), deleteException);
-        }
+        // DB 레코드 삭제는 Spring @Transactional의 자동 롤백으로 처리됨
+        // uploadDocument()에서 예외가 발생하면 Spring이 자동으로 DB 트랜잭션을 롤백하므로
+        // 명시적인 delete() 호출은 불필요하며, 오히려 이미 롤백된 엔티티를 삭제하려 시도하여
+        // 잠재적인 오류를 발생시킬 수 있음
     }
 
     private Document getDocumentOrThrow(String fileKey) {

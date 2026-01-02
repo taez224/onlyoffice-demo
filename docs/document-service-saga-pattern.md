@@ -59,14 +59,13 @@ sequenceDiagram
             DB-->>Service: Document{status=ACTIVE}
             Service-->>Client: ✓ Document
         else DB 저장 실패
-            Note over Service: 보상: MinIO 파일 삭제
+            Note over Service: 보상: MinIO 파일 삭제 + DB 자동 롤백
             Service->>Storage: deleteFile(path)
-            Service->>DB: delete(Document)
+            Note over Service,DB: Spring @Transactional 자동 롤백
             Service-->>Client: ✗ DocumentUploadException
         end
     else MinIO 업로드 실패
-        Note over Service: 보상: DB 레코드 삭제
-        Service->>DB: delete(Document)
+        Note over Service,DB: 보상: Spring @Transactional 자동 롤백
         Service-->>Client: ✗ DocumentUploadException
     end
 ```
@@ -110,27 +109,30 @@ return documentRepository.save(document);
 
 ### 보상 트랜잭션 전략
 
+> **중요**: `uploadDocument()` 메서드는 `@Transactional`로 선언되어 있으므로, 예외 발생 시 Spring이 자동으로 DB 트랜잭션을 롤백합니다. 따라서 DB cleanup은 불필요하며, **MinIO cleanup만 수동으로 처리**합니다.
+
 #### 시나리오 1: MinIO 업로드 실패
 ```java
 catch (Exception e) {
     // storageUploaded = false
-    documentRepository.delete(document);  // DB 레코드 삭제
+    // DB는 Spring @Transactional이 자동으로 롤백
     throw new DocumentUploadException(...);
 }
 ```
-- MinIO에 파일이 저장되지 않았으므로 **DB 레코드만 삭제**
+- MinIO에 파일이 저장되지 않았으므로 **스토리지 정리 불필요**
+- **DB는 Spring @Transactional이 자동 롤백** (명시적 delete() 불필요)
 
 #### 시나리오 2: 상태 변경(ACTIVE) 실패
 ```java
 catch (Exception e) {
     // storageUploaded = true
-    storageService.deleteFile(storagePath);  // MinIO 파일 삭제
-    documentRepository.delete(document);      // DB 레코드 삭제
+    storageService.deleteFile(storagePath);  // MinIO 파일 삭제 (수동)
+    // DB는 Spring @Transactional이 자동으로 롤백
     throw new DocumentUploadException(...);
 }
 ```
-- MinIO에 이미 업로드된 파일을 정리
-- DB 레코드도 삭제하여 완전 롤백
+- MinIO에 이미 업로드된 파일을 **수동으로 정리**
+- **DB는 Spring @Transactional이 자동 롤백** (명시적 delete() 불필요)
 
 ---
 
