@@ -405,6 +405,7 @@ PDF 파일은 자동으로 `edit: false`로 설정되어 읽기 전용 모드로
 ## 문서
 
 - [OnlyOffice 통합 가이드](docs/onlyoffice-integration-guide.md) - document.key 관리, callback 처리 등 기술 상세
+- [Document Service Saga 패턴](docs/document-service-saga-pattern.md) - 문서 업로드/삭제 분산 트랜잭션 및 보상 전략
 
 ## 참고 자료
 

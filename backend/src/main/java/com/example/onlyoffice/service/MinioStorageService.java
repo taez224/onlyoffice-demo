@@ -8,6 +8,8 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -75,12 +77,20 @@ public class MinioStorageService {
 
     /**
      * InputStream을 MinIO에 업로드 (크기가 불명확한 스트림도 지원)
+     * 
+     * <p>재시도 정책: 네트워크 장애 등으로 실패 시 최대 3회 재시도 (1초 간격)</p>
      *
      * @param inputStream 업로드할 InputStream
      * @param size        총 바이트 수 (모를 경우 -1)
      * @param contentType MIME 타입
      * @param objectName  MinIO object key
+     * @throws StorageException 재시도 후에도 실패 시
      */
+    @Retryable(
+        retryFor = {Exception.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000)
+    )
     public void uploadStream(InputStream inputStream, long size, String contentType, String objectName) {
         try {
             PutObjectArgs.Builder builder = PutObjectArgs.builder()
@@ -133,10 +143,17 @@ public class MinioStorageService {
 
     /**
      * MinIO에서 파일을 삭제
+     * 
+     * <p>재시도 정책: 네트워크 장애 등으로 실패 시 최대 3회 재시도 (1초 간격)</p>
      *
      * @param objectName The object key/path in MinIO
-     * @throws StorageException if deletion fails
+     * @throws StorageException 재시도 후에도 실패 시
      */
+    @Retryable(
+        retryFor = {Exception.class},
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000)
+    )
     public void deleteFile(String objectName) {
         try {
             minioClient.removeObject(
