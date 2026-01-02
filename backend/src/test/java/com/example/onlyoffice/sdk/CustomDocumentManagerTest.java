@@ -1,18 +1,25 @@
 package com.example.onlyoffice.sdk;
 
+import com.example.onlyoffice.entity.Document;
+import com.example.onlyoffice.service.DocumentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @DisplayName("CustomDocumentManager")
 class CustomDocumentManagerTest {
 
     private CustomDocumentManager documentManager;
     private CustomSettingsManager settingsManager;
+    private DocumentService documentService;
 
     @BeforeEach
     void setUp() {
@@ -22,7 +29,10 @@ class CustomDocumentManagerTest {
         ReflectionTestUtils.setField(settingsManager, "jwtSecret", "test-secret");
         ReflectionTestUtils.setField(settingsManager, "serverBaseUrl", "http://localhost:8080");
 
-        documentManager = new CustomDocumentManager(settingsManager);
+        // Mock DocumentService
+        documentService = mock(DocumentService.class);
+
+        documentManager = new CustomDocumentManager(settingsManager, documentService);
     }
 
     @Nested
@@ -30,42 +40,38 @@ class CustomDocumentManagerTest {
     class GetDocumentKey {
 
         @Test
-        @DisplayName("fileId를 sanitize하여 document key 생성")
-        void shouldGenerateSanitizedDocumentKey() {
+        @DisplayName("fileKey로 Document를 조회하여 editorKey 반환")
+        void shouldReturnEditorKeyFromDocumentService() {
             // given
-            String fileId = "sample.docx";
+            String fileKey = "550e8400-e29b-41d4-a716-446655440000";
+            String expectedKey = "550e8400-e29b-41d4-a716-446655440000_v1";
+
+            // Mock DocumentService behavior
+            when(documentService.getEditorKeyByFileKey(fileKey))
+                    .thenReturn(expectedKey);
 
             // when
-            String result = documentManager.getDocumentKey(fileId, false);
+            String result = documentManager.getDocumentKey(fileKey, false);
 
             // then
-            assertThat(result).isEqualTo("sampledocx");
+            assertThat(result).isEqualTo(expectedKey);
         }
 
         @Test
-        @DisplayName("특수문자가 포함된 fileId 처리")
-        void shouldHandleSpecialCharactersInFileId() {
+        @DisplayName("UUID fileKey로 버전 0인 document key 생성")
+        void shouldReturnEditorKeyVersion0() {
             // given
-            String fileId = "my-file@2024#test.docx";
+            String fileKey = "abc-123-def-456";
+            String expectedKey = "abc-123-def-456_v0";
+
+            when(documentService.getEditorKeyByFileKey(fileKey))
+                    .thenReturn(expectedKey);
 
             // when
-            String result = documentManager.getDocumentKey(fileId, false);
+            String result = documentManager.getDocumentKey(fileKey, false);
 
             // then
-            assertThat(result).isEqualTo("my-file2024testdocx");
-        }
-
-        @Test
-        @DisplayName("공백이 포함된 fileId 처리")
-        void shouldHandleWhitespaceInFileId() {
-            // given
-            String fileId = "my document file.docx";
-
-            // when
-            String result = documentManager.getDocumentKey(fileId, false);
-
-            // then
-            assertThat(result).isEqualTo("mydocumentfiledocx");
+            assertThat(result).isEqualTo(expectedKey);
         }
     }
 
@@ -74,29 +80,63 @@ class CustomDocumentManagerTest {
     class GetDocumentName {
 
         @Test
-        @DisplayName("fileId를 그대로 반환")
-        void shouldReturnFileIdAsDocumentName() {
+        @DisplayName("fileKey로 Document를 조회하여 원본 fileName 반환")
+        void shouldReturnOriginalFileNameFromDocument() {
             // given
-            String fileId = "sample.docx";
+            String fileKey = "550e8400-e29b-41d4-a716-446655440000";
+            String originalFileName = "sample.docx";
+
+            Document document = Document.builder()
+                    .fileName(originalFileName)
+                    .fileKey(fileKey)
+                    .build();
+
+            when(documentService.findByFileKey(fileKey))
+                    .thenReturn(Optional.of(document));
 
             // when
-            String result = documentManager.getDocumentName(fileId);
+            String result = documentManager.getDocumentName(fileKey);
 
             // then
-            assertThat(result).isEqualTo(fileId);
+            assertThat(result).isEqualTo(originalFileName);
         }
 
         @Test
-        @DisplayName("특수문자가 포함된 fileId도 그대로 반환")
-        void shouldReturnFileIdWithSpecialCharacters() {
+        @DisplayName("Document를 찾을 수 없으면 fileKey를 fallback으로 반환")
+        void shouldReturnFileKeyAsFallbackWhenDocumentNotFound() {
             // given
-            String fileId = "my-file@2024.docx";
+            String fileKey = "unknown-file-key";
+
+            when(documentService.findByFileKey(fileKey))
+                    .thenReturn(Optional.empty());
 
             // when
-            String result = documentManager.getDocumentName(fileId);
+            String result = documentManager.getDocumentName(fileKey);
 
             // then
-            assertThat(result).isEqualTo(fileId);
+            assertThat(result).isEqualTo(fileKey);
+        }
+
+        @Test
+        @DisplayName("특수문자가 포함된 원본 파일명도 정상 반환")
+        void shouldReturnFileNameWithSpecialCharacters() {
+            // given
+            String fileKey = "abc-123";
+            String fileName = "my-file@2024.docx";
+
+            Document document = Document.builder()
+                    .fileName(fileName)
+                    .fileKey(fileKey)
+                    .build();
+
+            when(documentService.findByFileKey(fileKey))
+                    .thenReturn(Optional.of(document));
+
+            // when
+            String result = documentManager.getDocumentName(fileKey);
+
+            // then
+            assertThat(result).isEqualTo(fileName);
         }
     }
 

@@ -49,23 +49,25 @@ public class CallbackController {
             String headerName = settingsManager.getSecurityHeader();  // "Authorization"
             String authHeader = request.getHeader(headerName);
 
-            // Extract fileName from query parameter
-            String fileName = request.getParameter("fileName");
-            if (fileName == null) {
-                fileName = "saved_" + System.currentTimeMillis() + ".docx";
-                log.warn("fileName parameter missing, using fallback: {}", fileName);
+            // Extract fileKey from query parameter
+            String fileKey = request.getParameter("fileKey");
+            if (fileKey == null) {
+                log.error("fileKey parameter missing in callback");
+                return Map.of("error", 1);
             }
 
             // Parse JSON to Callback object
             Callback callback = objectMapper.readValue(body, Callback.class);
 
-            log.info("Callback received: status={}, key={}", callback.getStatus(), callback.getKey());
+            log.info("Callback received: status={}, key={}, fileKey={}",
+                    callback.getStatus(), callback.getKey(), fileKey);
 
             // SDK verifies JWT and validates callback
             callbackService.verifyCallback(callback, authHeader);
 
             // SDK routes to appropriate handler (handlerSave, handlerForcesave, etc.)
-            callbackService.processCallback(callback, fileName);
+            // fileKey is passed as the fileId parameter
+            callbackService.processCallback(callback, fileKey);
 
             return Map.of("error", 0);
 
