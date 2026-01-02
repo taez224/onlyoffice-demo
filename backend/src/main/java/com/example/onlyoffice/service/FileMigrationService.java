@@ -137,7 +137,7 @@ public class FileMigrationService {
      */
     private String determineDocumentType(String extension) {
         return switch (extension) {
-            case "docx", "doc", "odt", "txt", "hwp"-> "word";
+            case "docx", "doc", "odt", "txt", "hwp" -> "word";
             case "xlsx", "xls", "xlsm", "ods", "csv" -> "cell";
             case "pptx", "ppt", "odp" -> "slide";
             case "pdf" -> "pdf";

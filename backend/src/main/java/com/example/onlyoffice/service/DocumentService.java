@@ -4,6 +4,7 @@ import com.example.onlyoffice.entity.Document;
 import com.example.onlyoffice.exception.DocumentNotFoundException;
 import com.example.onlyoffice.repository.DocumentRepository;
 import com.example.onlyoffice.util.KeyUtils;
+import com.example.onlyoffice.util.PathUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -64,13 +65,13 @@ public class DocumentService {
     }
 
     public File getFile(String fileName) {
-        return this.rootLocation.resolve(fileName).toFile();
+        return PathUtils.validateAndResolve(this.rootLocation, fileName).toFile();
     }
 
     public void saveFile(String fileName, InputStream inputStream) {
         try {
             log.info("Saving file: {}", fileName);
-            Path destinationFile = this.rootLocation.resolve(fileName);
+            Path destinationFile = PathUtils.validateAndResolve(this.rootLocation, fileName);
             log.info("Saving file to: {}", destinationFile);
             Files.copy(inputStream, destinationFile, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
@@ -144,8 +145,7 @@ public class DocumentService {
         Document doc = findByFileKey(fileKey)
             .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
 
-        // storagePath에서 파일 가져오기
-        return this.rootLocation.resolve(doc.getStoragePath()).toFile();
+        return PathUtils.validateAndResolve(this.rootLocation, doc.getStoragePath()).toFile();
     }
 
     /**
@@ -161,7 +161,7 @@ public class DocumentService {
 
         log.info("Downloading file from {} for fileKey {}", downloadUrl, fileKey);
         try (InputStream in = URI.create(downloadUrl).toURL().openStream()) {
-            Path destinationFile = this.rootLocation.resolve(doc.getStoragePath());
+            Path destinationFile = PathUtils.validateAndResolve(this.rootLocation, doc.getStoragePath());
             Files.copy(in, destinationFile, StandardCopyOption.REPLACE_EXISTING);
             log.info("File saved successfully for fileKey: {}", fileKey);
         } catch (Exception e) {
