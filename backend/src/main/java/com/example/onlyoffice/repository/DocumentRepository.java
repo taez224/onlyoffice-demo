@@ -2,12 +2,12 @@ package com.example.onlyoffice.repository;
 
 import com.example.onlyoffice.entity.Document;
 import com.example.onlyoffice.entity.DocumentStatus;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -60,6 +60,16 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
      */
     Optional<Document> findByFileKeyAndDeletedAtIsNull(String fileKey);
 
+    /**
+     * 비관적 락으로 문서를 조회 (Saga delete 흐름에서 사용)
+     *
+     * @param id 문서 ID
+     * @return 잠금이 걸린 문서 Optional
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
+    Optional<Document> findWithLockById(Long id);
+
     // ==================== 목록 조회 메서드 (Soft Delete 필터) ====================
 
     /**
@@ -82,7 +92,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
      * 상태별로 문서를 조회 (soft delete된 문서 제외)
      *
      * @param status 필터링할 문서 상태
-     * @param sort 정렬 조건
+     * @param sort   정렬 조건
      * @return 조건에 맞는 문서 목록
      */
     List<Document> findByStatusAndDeletedAtIsNull(DocumentStatus status, Sort sort);
@@ -90,7 +100,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     /**
      * 상태별로 문서를 페이지네이션하여 조회 (soft delete된 문서 제외)
      *
-     * @param status 필터링할 문서 상태
+     * @param status   필터링할 문서 상태
      * @param pageable 페이지네이션 조건
      * @return 조건에 맞는 문서 페이지
      */
@@ -120,7 +130,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
      * deletedAt 타임스탬프를 설정하여 문서를 soft delete
      * 벌크 업데이트 효율성을 위해 JPQL 사용
      *
-     * @param id 문서 ID
+     * @param id        문서 ID
      * @param deletedAt 삭제 시각
      * @return 업데이트된 행 수 (0 또는 1)
      */
@@ -162,7 +172,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
      * 파일명 패턴으로 문서 검색 (대소문자 구분 없음)
      *
      * @param fileNamePattern 검색 패턴 (와일드카드는 % 사용)
-     * @param pageable 페이지네이션 조건
+     * @param pageable        페이지네이션 조건
      * @return 조건에 맞는 문서 페이지
      */
     @Query("SELECT d FROM Document d WHERE LOWER(d.fileName) LIKE LOWER(:pattern) AND d.deletedAt IS NULL")

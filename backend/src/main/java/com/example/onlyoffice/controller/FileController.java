@@ -4,17 +4,21 @@ import com.example.onlyoffice.entity.Document;
 import com.example.onlyoffice.exception.DocumentNotFoundException;
 import com.example.onlyoffice.service.DocumentService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.io.FileSystemResource;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class FileController {
@@ -29,22 +33,42 @@ public class FileController {
      */
     @GetMapping("/files/{fileKey}")
     public ResponseEntity<Resource> downloadFile(@PathVariable String fileKey) {
-        // fileKey로 파일 가져오기
-        File file = documentService.getFileByFileKey(fileKey);
-        if (!file.exists()) {
-            return ResponseEntity.notFound().build();
-        }
-
-        // 원본 fileName을 Content-Disposition header에 사용
         Document doc = documentService.findByFileKey(fileKey)
                 .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
 
-        Resource resource = new FileSystemResource(file);
+        InputStream stream = null;
+        try {
+            stream = documentService.downloadDocumentStream(fileKey);
+            Resource resource = new InputStreamResource(stream);
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename=\"" + doc.getFileName() + "\"")
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(resource);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + doc.getFileName() + "\"")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .contentLength(doc.getFileSize())
+                    .body(resource);
+        } catch (Exception e) {
+            // 예외 발생 시 stream을 명시적으로 닫아 리소스 누수 방지
+            if (stream != null) {
+                try {
+                    stream.close();
+                } catch (IOException closeException) {
+                    log.warn("Failed to close stream for fileKey: {}", fileKey, closeException);
+                }
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * 문서 삭제 엔드포인트
+     *
+     * @param id 문서 ID
+     * @return 삭제 성공 메시지
+     */
+    @DeleteMapping("/api/documents/{id}")
+    public ResponseEntity<String> deleteDocument(@PathVariable Long id) {
+        documentService.deleteDocument(id);
+        return ResponseEntity.ok("Document deleted successfully");
     }
 }
