@@ -10,7 +10,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
@@ -60,15 +59,4 @@ public class FileController {
         }
     }
 
-    /**
-     * 문서 삭제 엔드포인트
-     *
-     * @param id 문서 ID
-     * @return 삭제 성공 메시지
-     */
-    @DeleteMapping("/api/documents/{id}")
-    public ResponseEntity<String> deleteDocument(@PathVariable Long id) {
-        documentService.deleteDocument(id);
-        return ResponseEntity.ok("Document deleted successfully");
-    }
 }

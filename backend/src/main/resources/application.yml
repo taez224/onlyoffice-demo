@@ -30,6 +30,10 @@ onlyoffice:
 storage:
   path: backend/storage
 
+# CORS configuration
+cors:
+  allowed-origins: http://localhost:3000,http://localhost:5173
+
 # MinIO Configuration
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
