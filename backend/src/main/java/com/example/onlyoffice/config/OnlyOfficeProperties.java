@@ -30,4 +30,19 @@ public class OnlyOfficeProperties {
     @NotBlank(message = "JWT Secret은 필수입니다")
     @Size(min = 32, message = "JWT Secret은 최소 32자 이상이어야 합니다")
     private String secret;
+
+    /**
+     * MinIO Presigned URL 사용 여부
+     * true: Document Server가 MinIO에서 직접 파일 다운로드 (presigned URL 사용)
+     * false: Document Server가 백엔드 프록시를 통해 파일 다운로드 (기본값)
+     */
+    private boolean usePresignedUrls = false;
+
+    /**
+     * MinIO External Endpoint
+     * ONLYOFFICE Document Server에서 접근 가능한 MinIO 엔드포인트
+     * Docker 환경: http://minio:9000 (내부 네트워크 호스트명)
+     * 프로덕션: 외부 접근 가능한 MinIO URL
+     */
+    private String minioExternalEndpoint = "http://minio:9000";
 }

@@ -25,6 +25,14 @@ onlyoffice:
   jwt:
     # JWT token expiration time in hours (default: 1 hour)
     expiration-hours: 1
+  # MinIO Presigned URL Configuration
+  # When true: Document Server downloads files directly from MinIO using presigned URLs
+  # When false: Document Server downloads via backend proxy (default, more secure)
+  use-presigned-urls: false
+  # MinIO endpoint accessible from ONLYOFFICE Document Server container
+  # Docker: http://minio:9000 (internal docker network hostname)
+  # Production: Use publicly accessible MinIO URL
+  minio-external-endpoint: http://minio:9000
 
 # Storage configuration
 storage:
