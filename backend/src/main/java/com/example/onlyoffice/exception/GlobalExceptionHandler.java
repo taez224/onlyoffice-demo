@@ -1,6 +1,7 @@
 package com.example.onlyoffice.exception;
 
 import jakarta.persistence.PessimisticLockException;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -110,6 +111,32 @@ public class GlobalExceptionHandler {
                 "파일 스토리지 작업 중 오류가 발생했습니다."
         );
         problemDetail.setTitle("Storage Error");
+
+        return problemDetail;
+    }
+
+    /**
+     * 입력값 검증 실패 예외 처리.
+     *
+     * <p>@Pattern, @NotNull 등 Bean Validation 어노테이션 검증 실패 시 발생합니다.</p>
+     *
+     * @param e 제약 조건 위반 예외
+     * @return HTTP 400 Bad Request 응답
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ProblemDetail handleConstraintViolationException(ConstraintViolationException e) {
+        log.warn("Validation failed: {}", e.getMessage());
+
+        String message = e.getConstraintViolations().stream()
+                .map(violation -> violation.getMessage())
+                .findFirst()
+                .orElse("Invalid input");
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                message
+        );
+        problemDetail.setTitle("Validation Error");
 
         return problemDetail;
     }
