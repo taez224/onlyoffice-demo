@@ -27,13 +27,13 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
 /**
- * DocumentService 통합 테스트.
+ * DocumentService 엔드-투-엔드 동시성 테스트.
  *
- * <p>실제 DB와의 상호작용을 테스트하여 동시성 제어 및 트랜잭션 격리를 검증합니다.</p>
+ * <p>Mock을 사용한 동시성 제어 및 트랜잭션 격리를 검증합니다.</p>
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("DocumentService 동시성 테스트")
-class DocumentServiceIntegrationTest {
+@DisplayName("DocumentService 엔드-투-엔드 동시성 테스트")
+class DocumentServiceEndToEndTest {
 
     @Mock
     private DocumentRepository documentRepository;
