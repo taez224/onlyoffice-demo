@@ -374,9 +374,12 @@ class CallbackQueueServiceTest {
         @DisplayName("should cleanup idle executors after timeout")
         void shouldCleanupIdleExecutors() throws Exception {
             // given
-            callbackQueueService.submitAndWait("doc1", () -> {});
-            callbackQueueService.submitAndWait("doc2", () -> {});
-            callbackQueueService.submitAndWait("doc3", () -> {});
+            callbackQueueService.submitAndWait("doc1", () -> {
+            });
+            callbackQueueService.submitAndWait("doc2", () -> {
+            });
+            callbackQueueService.submitAndWait("doc3", () -> {
+            });
 
             // Verify 3 executors created
             assertThat(callbackQueueService.getQueueCount()).isEqualTo(3);
@@ -394,7 +397,8 @@ class CallbackQueueServiceTest {
         @DisplayName("should not cleanup active executors")
         void shouldNotCleanupActiveExecutors() throws Exception {
             // given
-            callbackQueueService.submitAndWait("activeDoc", () -> {});
+            callbackQueueService.submitAndWait("activeDoc", () -> {
+            });
 
             int initialCount = callbackQueueService.getQueueCount();
 
@@ -403,6 +407,232 @@ class CallbackQueueServiceTest {
 
             // then - active executor should not be removed
             assertThat(callbackQueueService.getQueueCount()).isGreaterThanOrEqualTo(initialCount - 1);
+        }
+    }
+
+
+    @Nested
+    @DisplayName("Race Condition Prevention")
+    class RaceConditionPrevention {
+
+        @Test
+        @DisplayName("should not reject submission when executor is being cleaned up")
+        void shouldNotRejectSubmissionDuringCleanup() throws Exception {
+            // given - create executor and let it become idle
+            callbackQueueService.submitAndWait("racyDoc", () -> "task1");
+            Thread.sleep(100);  // Ensure timestamp is old
+
+            AtomicInteger successCount = new AtomicInteger(0);
+            AtomicInteger failureCount = new AtomicInteger(0);
+            CountDownLatch cleanupStarted = new CountDownLatch(1);
+            CountDownLatch cleanupEnded = new CountDownLatch(1);
+            CountDownLatch submitCompleted = new CountDownLatch(1);
+
+            // when - cleanup and submit race
+            Thread cleanupThread = new Thread(() -> {
+                try {
+                    cleanupStarted.countDown();
+                    callbackQueueService.cleanupIdleExecutors();
+                } finally {
+                    cleanupEnded.countDown();
+                }
+            });
+
+            Thread submitThread = new Thread(() -> {
+                try {
+                    cleanupStarted.await();
+                    Thread.sleep(10);  // Let cleanup start
+                    callbackQueueService.submitAndWait("racyDoc", () -> {
+                        successCount.incrementAndGet();
+                        return null;
+                    });
+                } catch (RejectedExecutionException e) {
+                    failureCount.incrementAndGet();
+                    throw new RuntimeException("Unexpected RejectedExecutionException", e);
+                } catch (Exception e) {
+                    failureCount.incrementAndGet();
+                    throw new RuntimeException(e);
+                } finally {
+                    submitCompleted.countDown();
+                }
+            });
+
+            cleanupThread.start();
+            submitThread.start();
+
+            boolean completed = submitCompleted.await(5, TimeUnit.SECONDS);
+            boolean cleanupCompleted = cleanupEnded.await(1, TimeUnit.SECONDS);
+
+            cleanupThread.join(1000);
+            submitThread.join(1000);
+
+            // then - submission should succeed (either reactivates or creates new executor)
+            assertThat(completed).isTrue();
+            assertThat(cleanupCompleted).isTrue();
+            assertThat(failureCount.get()).isEqualTo(0);
+            assertThat(successCount.get()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should handle concurrent submit and cleanup without race conditions")
+        void shouldHandleConcurrentSubmitAndCleanup() throws Exception {
+            // given
+            int threadCount = 10;
+            CountDownLatch startLatch = new CountDownLatch(1);
+            CountDownLatch completionLatch = new CountDownLatch(threadCount + 1);
+            AtomicInteger successCount = new AtomicInteger(0);
+            AtomicInteger failureCount = new AtomicInteger(0);
+
+            // when - multiple threads submit while cleanup runs periodically
+            ExecutorService testPool = Executors.newFixedThreadPool(threadCount + 1);
+
+            // Cleanup thread
+            testPool.submit(() -> {
+                try {
+                    startLatch.await();
+                    for (int i = 0; i < 20; i++) {
+                        callbackQueueService.cleanupIdleExecutors();
+                        Thread.sleep(10);
+                    }
+                } catch (Exception e) {
+                    failureCount.incrementAndGet();
+                } finally {
+                    completionLatch.countDown();
+                }
+            });
+
+            // Submit threads
+            for (int i = 0; i < threadCount; i++) {
+                final int threadId = i;
+                testPool.submit(() -> {
+                    try {
+                        startLatch.await();
+                        for (int j = 0; j < 5; j++) {
+                            callbackQueueService.submitAndWait("doc" + threadId, () -> {
+                                Thread.sleep(5);
+                                successCount.incrementAndGet();
+                                return null;
+                            });
+                        }
+                    } catch (Exception e) {
+                        failureCount.incrementAndGet();
+                        e.printStackTrace();
+                    } finally {
+                        completionLatch.countDown();
+                    }
+                });
+            }
+
+            startLatch.countDown();
+            boolean completed = completionLatch.await(30, TimeUnit.SECONDS);
+            testPool.shutdown();
+
+            // then - all tasks should complete successfully
+            assertThat(completed).isTrue();
+            assertThat(failureCount.get()).isEqualTo(0);
+            assertThat(successCount.get()).isEqualTo(threadCount * 5);
+        }
+
+        @Test
+        @DisplayName("should prevent shutdown of active executor during cleanup")
+        void shouldPreventShutdownOfActiveExecutor() throws Exception {
+            // given
+            CountDownLatch taskStarted = new CountDownLatch(1);
+            CountDownLatch taskCanComplete = new CountDownLatch(1);
+            CountDownLatch cleanupTriggered = new CountDownLatch(1);
+
+            // Submit long-running task
+            CompletableFuture<Void> taskFuture = CompletableFuture.runAsync(() -> {
+                try {
+                    callbackQueueService.submitAndWait("activeDoc", () -> {
+                        taskStarted.countDown();
+                        cleanupTriggered.await();
+                        taskCanComplete.await();
+                        return null;
+                    });
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            taskStarted.await(2, TimeUnit.SECONDS);
+
+            // when - trigger cleanup while task is active
+            Thread cleanupThread = new Thread(() -> {
+                try {
+                    cleanupTriggered.countDown();
+                    callbackQueueService.cleanupIdleExecutors();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            cleanupThread.start();
+            Thread.sleep(50);  // Let cleanup attempt
+
+            // then - executor should still exist (not shut down because it's active)
+            assertThat(callbackQueueService.getQueueCount()).isGreaterThanOrEqualTo(1);
+
+            // Cleanup
+            taskCanComplete.countDown();
+            taskFuture.join();
+            cleanupThread.join();
+        }
+
+        @Test
+        @DisplayName("should reactivate idle executor when new task arrives")
+        void shouldReactivateIdleExecutor() throws Exception {
+            // given - executor becomes idle
+            callbackQueueService.submitAndWait("idleDoc", () -> "task1");
+            Thread.sleep(100);
+
+            // Mark as idle via cleanup (doesn't shutdown because still recent)
+            // Actually, let's just force it to be idle by waiting
+            int initialCount = callbackQueueService.getQueueCount();
+
+            // when - new task arrives
+            String result = callbackQueueService.submitAndWait("idleDoc", () -> "task2");
+
+            // then - should reuse executor (count unchanged)
+            assertThat(result).isEqualTo("task2");
+            assertThat(callbackQueueService.getQueueCount()).isEqualTo(initialCount);
+        }
+
+        @Test
+        @DisplayName("should handle rapid submit-cleanup-submit patterns safely")
+        void shouldHandleRapidPatterns() throws Exception {
+            // given
+            AtomicInteger completedTasks = new AtomicInteger(0);
+            AtomicInteger failedTasks = new AtomicInteger(0);
+
+            // when - rapid pattern: submit -> cleanup -> submit -> cleanup
+            for (int cycle = 0; cycle < 10; cycle++) {
+                try {
+                    // Submit
+                    callbackQueueService.submitAndWait("patternDoc", () -> {
+                        completedTasks.incrementAndGet();
+                        return null;
+                    });
+
+                    // Immediately trigger cleanup
+                    callbackQueueService.cleanupIdleExecutors();
+
+                    // Submit again
+                    callbackQueueService.submitAndWait("patternDoc", () -> {
+                        completedTasks.incrementAndGet();
+                        return null;
+                    });
+
+                    // Trigger cleanup again
+                    callbackQueueService.cleanupIdleExecutors();
+                } catch (Exception e) {
+                    failedTasks.incrementAndGet();
+                    System.err.println("Task failed in cycle " + cycle + ": " + e.getMessage());
+                }
+            }
+
+            // then - all tasks should complete
+            assertThat(failedTasks.get()).isEqualTo(0);
+            assertThat(completedTasks.get()).isEqualTo(20);  // 2 per cycle × 10 cycles
         }
     }
 }

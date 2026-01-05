@@ -6,27 +6,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
 import java.util.concurrent.*;
 
-/**
- * Callback 요청을 문서별로 순차 처리하는 큐 서비스.
- *
- * <p><b>동시성 제어 전략:</b></p>
- * <ul>
- *   <li>각 문서(fileKey)마다 독립적인 싱글 스레드 executor 관리</li>
- *   <li>동일 문서의 callback: 순차 처리 (Race condition 방지)</li>
- *   <li>다른 문서의 callback: 병렬 처리 (성능 향상)</li>
- * </ul>
- *
- * <p><b>제한사항:</b></p>
- * <ul>
- *   <li>단일 JVM 인스턴스에서만 동작</li>
- *   <li>수평 확장(다중 인스턴스) 배포 시 Redis/Kafka 기반 분산 큐로 개선 필요</li>
- * </ul>
- *
- * @see com.example.onlyoffice.sdk.CustomCallbackService
- */
 @Slf4j
 @Service
 public class CallbackQueueService {
@@ -40,21 +21,19 @@ public class CallbackQueueService {
     @Value("${callback.executor.cleanup-interval-minutes:5}")
     private long cleanupIntervalMinutes;
 
-    // 문서별 싱글 스레드 executor 관리
-    // 동일 문서의 callback은 순차 처리, 다른 문서는 병렬 처리
-    private final Map<String, ExecutorService> documentQueues = new ConcurrentHashMap<>();
-
-    // Executor 마지막 접근 시간 추적 (idle 정리용)
-    private final Map<String, Long> lastAccessTime = new ConcurrentHashMap<>();
+    // Single map containing managed executors with atomic state transitions
+    // Replaces previous dual-map approach (documentQueues + lastAccessTime)
+    private final ConcurrentHashMap<String, ManagedExecutor> documentExecutors = new ConcurrentHashMap<>();
 
     /**
      * Callback 작업을 문서별 큐에 제출하고 완료까지 대기합니다.
      *
-     * <p><b>동시성 제어 전략:</b></p>
+     * <p><b>동시성 제어:</b></p>
      * <ul>
-     *   <li>각 문서(fileKey)마다 독립적인 싱글 스레드 executor 관리</li>
-     *   <li>동일 문서의 callback: 순차 처리 (Race condition 방지)</li>
-     *   <li>다른 문서의 callback: 병렬 처리 (성능 향상)</li>
+     *   <li>Lock-free CAS 기반 상태 머신</li>
+     *   <li>동일 문서의 callback: 순차 처리</li>
+     *   <li>다른 문서의 callback: 병렬 처리</li>
+     *   <li>Race condition 제거: atomic state transitions</li>
      * </ul>
      *
      * @param fileKey 문서 식별자
@@ -70,6 +49,10 @@ public class CallbackQueueService {
     /**
      * Callback 작업을 문서별 큐에 제출하고 지정된 시간 동안 완료를 대기합니다.
      *
+     * <p><b>재시도 로직:</b></p>
+     * Executor가 shutdown 상태인 경우 새로운 executor를 생성하고 재시도합니다.
+     * 이는 cleanup과 submit의 race condition 해결을 위한 설계입니다.
+     *
      * @param fileKey 문서 식별자
      * @param task    실행할 작업
      * @param timeout 대기 시간
@@ -82,34 +65,44 @@ public class CallbackQueueService {
     public <T> T submitAndWait(String fileKey, Callable<T> task, long timeout, TimeUnit unit) throws Exception {
         log.debug("Queueing callback for fileKey: {}", fileKey);
 
-        // 문서별 executor 생성 (없으면 생성, 있으면 기존 사용)
-        ExecutorService executor = getOrCreateExecutor(fileKey);
+        // Retry loop: if executor is shutting down, create new one
+        while (true) {
+            ManagedExecutor managed = documentExecutors.computeIfAbsent(fileKey, key ->
+                    new ManagedExecutor(key, createExecutor(key))
+            );
 
-        // 마지막 접근 시간 업데이트 (idle cleanup용)
-        lastAccessTime.put(fileKey, System.currentTimeMillis());
+            // Attempt to submit task atomically
+            Future<T> future = managed.trySubmit(task);
 
-        Future<T> future = executor.submit(task);
-
-        try {
-            T result = future.get(timeout, unit);
-            log.debug("Callback completed successfully for fileKey: {}", fileKey);
-            return result;
-        } catch (ExecutionException e) {
-            log.error("Callback execution failed for fileKey: {}", fileKey, e.getCause());
-            Throwable cause = e.getCause();
-            if (cause instanceof Exception) {
-                throw (Exception) cause;
+            if (future != null) {
+                // Successfully submitted
+                try {
+                    T result = future.get(timeout, unit);
+                    log.debug("Callback completed successfully for fileKey: {}", fileKey);
+                    return result;
+                } catch (ExecutionException e) {
+                    log.error("Callback execution failed for fileKey: {}", fileKey, e.getCause());
+                    Throwable cause = e.getCause();
+                    if (cause instanceof Exception) {
+                        throw (Exception) cause;
+                    }
+                    throw new RuntimeException("Callback execution failed", cause);
+                } catch (TimeoutException e) {
+                    log.error("Callback timed out for fileKey: {} after {} {}", fileKey, timeout, unit);
+                    future.cancel(true);
+                    throw e;
+                } catch (InterruptedException e) {
+                    log.warn("Callback interrupted for fileKey: {}", fileKey);
+                    Thread.currentThread().interrupt();
+                    future.cancel(true);
+                    throw e;
+                }
+            } else {
+                // Executor is shutting down, remove it and retry with new executor
+                log.info("Executor shutting down for fileKey: {}, creating new one", fileKey);
+                documentExecutors.remove(fileKey, managed);
+                // Loop continues with fresh executor
             }
-            throw new RuntimeException("Callback execution failed", cause);
-        } catch (TimeoutException e) {
-            log.error("Callback timed out for fileKey: {} after {} {}", fileKey, timeout, unit);
-            future.cancel(true);
-            throw e;
-        } catch (InterruptedException e) {
-            log.warn("Callback interrupted for fileKey: {}", fileKey);
-            Thread.currentThread().interrupt();
-            future.cancel(true);
-            throw e;
         }
     }
 
@@ -128,20 +121,17 @@ public class CallbackQueueService {
     }
 
     /**
-     * 문서별 executor를 생성하거나 기존 것을 반환합니다.
-     * 첫 요청 시에만 executor 생성, 이후 재사용
+     * 문서별 executor를 생성합니다.
      *
      * @param fileKey 문서 식별자
      * @return 문서별 싱글 스레드 executor
      */
-    private ExecutorService getOrCreateExecutor(String fileKey) {
-        return documentQueues.computeIfAbsent(fileKey, key -> {
-            log.info("Creating single-thread executor for fileKey: {}", key);
-            return Executors.newSingleThreadExecutor(r -> {
-                Thread thread = new Thread(r, "callback-" + key);
-                thread.setDaemon(false);
-                return thread;
-            });
+    private ExecutorService createExecutor(String fileKey) {
+        log.info("Creating single-thread executor for fileKey: {}", fileKey);
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread thread = new Thread(r, "callback-" + fileKey);
+            thread.setDaemon(false);
+            return thread;
         });
     }
 
@@ -150,33 +140,22 @@ public class CallbackQueueService {
      */
     @PreDestroy
     public void shutdown() {
-        log.info("Shutting down CallbackQueueService with {} document queues...", documentQueues.size());
-
-        // 모든 executor에 shutdown 신호
-        documentQueues.values().forEach(ExecutorService::shutdown);
+        log.info("Shutting down CallbackQueueService with {} document queues...", documentExecutors.size());
 
         try {
-            // 모든 executor가 종료될 때까지 대기
-            if (!waitForAllExecutorsTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                log.warn("Some executors did not terminate gracefully, forcing shutdown");
-
-                // 강제 shutdown
-                documentQueues.values().forEach(ExecutorService::shutdownNow);
-
-                // 다시 한 번 대기
-                if (!waitForAllExecutorsTermination(10, TimeUnit.SECONDS)) {
-                    log.error("Some executors did not terminate after forced shutdown");
+            // Shutdown all executors in parallel
+            documentExecutors.values().parallelStream().forEach(managed -> {
+                try {
+                    managed.forceShutdown(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Interrupted while shutting down executor");
                 }
-            }
+            });
 
-            documentQueues.clear();
-            lastAccessTime.clear();
-        } catch (InterruptedException e) {
-            log.warn("Shutdown interrupted, forcing immediate shutdown");
-            documentQueues.values().forEach(ExecutorService::shutdownNow);
-            documentQueues.clear();
-            lastAccessTime.clear();
-            Thread.currentThread().interrupt();
+            documentExecutors.clear();
+        } catch (Exception e) {
+            log.error("Error during shutdown", e);
         }
 
         log.info("CallbackQueueService shutdown complete");
@@ -184,57 +163,48 @@ public class CallbackQueueService {
 
     /**
      * 30분 이상 idle한 executor를 정리하는 scheduled job (5분마다 실행).
+     *
+     * <p><b>동시성 안전성:</b></p>
+     * <ul>
+     *   <li>Atomic state machine: ACTIVE → IDLE → SHUTTING_DOWN 상태 전환</li>
+     *   <li>ACTIVE 상태인 executor는 shutdown할 수 없음 (submit과의 race 방지)</li>
+     *   <li>CAS 기반 원자적 상태 전환으로 race condition 완전히 제거</li>
+     * </ul>
      */
     @Scheduled(fixedDelayString = "${callback.executor.cleanup-interval-minutes:5}", timeUnit = TimeUnit.MINUTES)
     public void cleanupIdleExecutors() {
         long now = System.currentTimeMillis();
         long idleThresholdMs = TimeUnit.MINUTES.toMillis(idleTimeoutMinutes);
 
-        documentQueues.entrySet().removeIf(entry -> {
+        int cleanupCount = 0;
+
+        for (var iterator = documentExecutors.entrySet().iterator(); iterator.hasNext(); ) {
+            var entry = iterator.next();
             String fileKey = entry.getKey();
-            Long lastAccess = lastAccessTime.get(fileKey);
+            ManagedExecutor managed = entry.getValue();
 
-            if (lastAccess != null && (now - lastAccess) > idleThresholdMs) {
-                ExecutorService executor = entry.getValue();
-                executor.shutdown();
-                try {
-                    if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                        executor.shutdownNow();
+            // Two atomic steps to safely cleanup
+            // Step 1: Try to mark as IDLE if inactive for threshold
+            if (managed.tryMarkIdle(now, idleThresholdMs)) {
+                // Step 2: Try to shutdown (only succeeds if truly IDLE)
+                if (managed.tryShutdown()) {
+                    try {
+                        managed.forceShutdown(5, TimeUnit.SECONDS);
+                        iterator.remove();
+                        cleanupCount++;
+                        log.info("Cleaned up idle executor for fileKey: {}", fileKey);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Cleanup interrupted for fileKey: {}", fileKey);
+                        break;
                     }
-                } catch (InterruptedException e) {
-                    executor.shutdownNow();
-                    Thread.currentThread().interrupt();
                 }
-                lastAccessTime.remove(fileKey);
-                log.info("Cleaned up idle executor for fileKey: {}", fileKey);
-                return true;
-            }
-            return false;
-        });
-    }
-
-    /**
-     * 모든 executor가 종료될 때까지 대기합니다.
-     *
-     * @param timeout 대기 시간
-     * @param unit    시간 단위
-     * @return 모든 executor가 종료되면 true
-     * @throws InterruptedException 대기 중 인터럽트 발생 시
-     */
-    private boolean waitForAllExecutorsTermination(long timeout, TimeUnit unit) throws InterruptedException {
-        long deadlineNanos = System.nanoTime() + unit.toNanos(timeout);
-
-        for (ExecutorService executor : documentQueues.values()) {
-            long remainingNanos = deadlineNanos - System.nanoTime();
-            if (remainingNanos <= 0) {
-                return false;
-            }
-            if (!executor.awaitTermination(remainingNanos, TimeUnit.NANOSECONDS)) {
-                return false;
             }
         }
 
-        return true;
+        if (cleanupCount > 0) {
+            log.info("Cleanup completed: {} idle executors removed", cleanupCount);
+        }
     }
 
     /**
@@ -243,7 +213,7 @@ public class CallbackQueueService {
      * @return 현재 관리 중인 executor 개수
      */
     public int getQueueCount() {
-        return documentQueues.size();
+        return documentExecutors.size();
     }
 
     /**
@@ -252,7 +222,7 @@ public class CallbackQueueService {
      * @return 모두 종료되면 true
      */
     public boolean allQueuesShutdown() {
-        return documentQueues.values().stream().allMatch(ExecutorService::isShutdown);
+        return documentExecutors.values().stream().allMatch(ManagedExecutor::isShutdown);
     }
 
     /**
@@ -261,6 +231,6 @@ public class CallbackQueueService {
      * @return 큐가 비어있으면 true
      */
     public boolean isEmpty() {
-        return documentQueues.isEmpty();
+        return documentExecutors.isEmpty();
     }
 }
