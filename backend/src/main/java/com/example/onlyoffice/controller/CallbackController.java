@@ -4,9 +4,13 @@ import com.example.onlyoffice.sdk.CustomSettingsManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.onlyoffice.model.documenteditor.Callback;
 import com.onlyoffice.service.documenteditor.callback.CallbackService;
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.PessimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -42,7 +46,7 @@ public class CallbackController {
      * 4. CustomCallbackService executes business logic
      */
     @PostMapping("/callback")
-    public Map<String, Object> callback(HttpServletRequest request, @RequestBody String body) {
+    public ResponseEntity<Map<String, Object>> callback(HttpServletRequest request, @RequestBody String body) {
 
         try {
             // Get security header name from settings (not hardcoded!)
@@ -53,7 +57,7 @@ public class CallbackController {
             String fileKey = request.getParameter("fileKey");
             if (fileKey == null) {
                 log.error("fileKey parameter missing in callback");
-                return Map.of("error", 1);
+                return ResponseEntity.ok(Map.of("error", 1));
             }
 
             // Parse JSON to Callback object
@@ -69,11 +73,15 @@ public class CallbackController {
             // fileKey is passed as the fileId parameter
             callbackService.processCallback(callback, fileKey);
 
-            return Map.of("error", 0);
+            return ResponseEntity.ok(Map.of("error", 0));
 
+        } catch (LockTimeoutException | PessimisticLockException e) {
+            log.warn("Lock timeout for callback, ONLYOFFICE should retry: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("error", 1, "message", "Document is locked, please retry"));
         } catch (Exception e) {
             log.error("Callback processing failed", e);
-            return Map.of("error", 1);
+            return ResponseEntity.ok(Map.of("error", 1));
         }
     }
 }
