@@ -70,6 +70,17 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
     Optional<Document> findWithLockById(Long id);
 
+    /**
+     * 비관적 락으로 문서를 조회 (Callback 처리에서 사용)
+     * fileKey로 조회하며, soft delete된 문서는 제외합니다.
+     *
+     * @param fileKey 문서의 고유 키
+     * @return 잠금이 걸린 문서 Optional
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
+    Optional<Document> findWithLockByFileKeyAndDeletedAtIsNull(String fileKey);
+
     // ==================== 목록 조회 메서드 (Soft Delete 필터) ====================
 
     /**

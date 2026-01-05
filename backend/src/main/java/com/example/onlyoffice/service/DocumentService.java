@@ -211,28 +211,81 @@ public class DocumentService {
         return KeyUtils.generateEditorKey(document.getFileKey(), document.getEditorVersion());
     }
 
-    public void incrementEditorVersionByFileKey(String fileKey) {
-        documentRepository.findByFileKeyAndDeletedAtIsNull(fileKey)
-                .ifPresentOrElse(doc -> {
-                    int oldVersion = doc.getEditorVersion();
-                    doc.incrementEditorVersion();
-                    documentRepository.save(doc);
-                    log.info("Editor version incremented for fileKey {}: {} -> {}",
-                            fileKey, oldVersion, doc.getEditorVersion());
-                }, () -> {
-                    throw new DocumentNotFoundException("Document not found for fileKey: " + fileKey);
-                });
-    }
-
     @Transactional(readOnly = true)
     public InputStream downloadDocumentStream(String fileKey) {
         Document document = getDocumentOrThrow(fileKey);
         return storageService.downloadFile(document.getStoragePath());
     }
 
-    public void saveDocumentFromUrlByFileKey(String downloadUrl, String fileKey) {
-        Document document = getDocumentOrThrow(fileKey);
-        log.info("Downloading file from {} for fileKey {}", downloadUrl, fileKey);
+    /**
+     * Callback SAVE 처리: 비관적 락으로 문서 조회 후 저장 및 버전 증가.
+     *
+     * <p><b>동시성 제어:</b></p>
+     * <ul>
+     *   <li>PESSIMISTIC_WRITE 락으로 동시 수정 방지 (타임아웃 3초)</li>
+     *   <li>파일 저장과 버전 증가가 원자적으로 처리됨</li>
+     * </ul>
+     *
+     * @param downloadUrl ONLYOFFICE에서 제공하는 편집된 문서 다운로드 URL
+     * @param fileKey     문서의 고유 키
+     * @throws DocumentNotFoundException 문서가 존재하지 않을 경우
+     */
+    @Transactional(timeout = 65)
+    public void processCallbackSave(String downloadUrl, String fileKey) {
+        // 비관적 락으로 문서 조회
+        Document document = documentRepository.findWithLockByFileKeyAndDeletedAtIsNull(fileKey)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
+
+        log.info("Processing SAVE callback with lock for fileKey: {}", fileKey);
+
+        // 파일 저장
+        saveDocumentFromUrl(downloadUrl, document);
+
+        // 버전 증가
+        int oldVersion = document.getEditorVersion();
+        document.incrementEditorVersion();
+        documentRepository.save(document);
+
+        log.info("SAVE callback completed. fileKey: {}, version: {} -> {}",
+                fileKey, oldVersion, document.getEditorVersion());
+    }
+
+    /**
+     * Callback FORCESAVE 처리: 비관적 락으로 문서 조회 후 저장 (버전 유지).
+     *
+     * <p><b>동시성 제어:</b></p>
+     * <ul>
+     *   <li>PESSIMISTIC_WRITE 락으로 동시 수정 방지 (타임아웃 3초)</li>
+     *   <li>협업 편집 중이므로 버전은 증가하지 않음</li>
+     * </ul>
+     *
+     * @param downloadUrl ONLYOFFICE에서 제공하는 편집된 문서 다운로드 URL
+     * @param fileKey     문서의 고유 키
+     * @throws DocumentNotFoundException 문서가 존재하지 않을 경우
+     */
+    @Transactional(timeout = 65)
+    public void processCallbackForceSave(String downloadUrl, String fileKey) {
+        // 비관적 락으로 문서 조회
+        Document document = documentRepository.findWithLockByFileKeyAndDeletedAtIsNull(fileKey)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
+
+        log.info("Processing FORCESAVE callback with lock for fileKey: {}", fileKey);
+
+        // 파일 저장 (버전 증가 없음)
+        saveDocumentFromUrl(downloadUrl, document);
+
+        log.info("FORCESAVE callback completed. fileKey: {}, version unchanged: {}",
+                fileKey, document.getEditorVersion());
+    }
+
+    /**
+     * URL에서 문서를 다운로드하여 저장하는 내부 메서드.
+     *
+     * @param downloadUrl 다운로드 URL
+     * @param document    저장할 문서 엔티티
+     */
+    private void saveDocumentFromUrl(String downloadUrl, Document document) {
+        log.info("Downloading file from {} for fileKey {}", downloadUrl, document.getFileKey());
 
         try {
             URLConnection connection = URI.create(downloadUrl).toURL().openConnection();
@@ -244,8 +297,7 @@ public class DocumentService {
                 contentType = DEFAULT_CONTENT_TYPE;
             }
 
-            try (ByteCountingInputStream inputStream =
-                         new ByteCountingInputStream(connection.getInputStream())) {
+            try (ByteCountingInputStream inputStream = new ByteCountingInputStream(connection.getInputStream())) {
                 storageService.uploadStream(inputStream, contentLength, contentType, document.getStoragePath());
 
                 long uploadedSize = inputStream.getBytesRead();
@@ -255,7 +307,7 @@ public class DocumentService {
                     document.setFileSize(contentLength);
                 }
                 documentRepository.save(document);
-                log.info("File saved successfully for fileKey: {}", fileKey);
+                log.info("File saved successfully for fileKey: {}", document.getFileKey());
             }
         } catch (Exception e) {
             log.error("Error downloading file from {}", downloadUrl, e);
