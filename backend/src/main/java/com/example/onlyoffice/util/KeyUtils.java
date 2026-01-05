@@ -116,27 +116,5 @@ public final class KeyUtils {
         return UUID.randomUUID().toString();
     }
 
-    /**
-     * 파일명과 타임스탬프로 fileKey 생성 (신규 문서용)
-     *
-     * @deprecated Use {@link #generateFileKey()} instead for UUID-based keys.
-     *             This method is kept for backward compatibility and migration.
-     * @param fileName 파일명
-     * @param timestamp 생성 시각 (밀리초)
-     * @return 고유한 fileKey
-     */
-    @Deprecated
-    public static String generateFileKey(String fileName, long timestamp) {
-        String base = sanitize(fileName) + "_" + timestamp;
-
-        if (base.length() > MAX_KEY_LENGTH - 10) {
-            // 버전 접미사 공간 확보
-            String hash = DigestUtils.md5DigestAsHex(
-                fileName.getBytes(StandardCharsets.UTF_8)
-            ).substring(0, HASH_LENGTH);
-            return hash + "_" + timestamp;
-        }
-
-        return base;
-    }
+    
 }
