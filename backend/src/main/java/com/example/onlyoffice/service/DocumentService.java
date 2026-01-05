@@ -230,6 +230,7 @@ public class DocumentService {
      * @param fileKey     문서의 고유 키
      * @throws DocumentNotFoundException 문서가 존재하지 않을 경우
      */
+    @Transactional(timeout = 65)
     public void processCallbackSave(String downloadUrl, String fileKey) {
         // 비관적 락으로 문서 조회
         Document document = documentRepository.findWithLockByFileKeyAndDeletedAtIsNull(fileKey)
@@ -262,6 +263,7 @@ public class DocumentService {
      * @param fileKey     문서의 고유 키
      * @throws DocumentNotFoundException 문서가 존재하지 않을 경우
      */
+    @Transactional(timeout = 65)
     public void processCallbackForceSave(String downloadUrl, String fileKey) {
         // 비관적 락으로 문서 조회
         Document document = documentRepository.findWithLockByFileKeyAndDeletedAtIsNull(fileKey)
