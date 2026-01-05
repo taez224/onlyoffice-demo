@@ -53,30 +53,4 @@ public class EditorConfigService {
 
         return response;
     }
-
-    /**
-     * Create editor configuration for a file
-     *
-     * @deprecated Use {@link #createEditorResponseByFileKey(String)} instead
-     * @param fileName The file name
-     * @return Editor configuration response with config and documentServerUrl
-     */
-    @Deprecated
-    public Map<String, Object> createEditorResponse(String fileName) {
-        // Use SDK ConfigService to create type-safe Config object
-        Config config = sdkConfigService.createConfig(fileName, Mode.EDIT, Type.DESKTOP);
-
-        // Convert Config object to Map for JSON response
-        @SuppressWarnings("unchecked")
-        Map<String, Object> configMap = objectMapper.convertValue(config, Map.class);
-
-        // Build response
-        Map<String, Object> response = new HashMap<>();
-        response.put("config", configMap);
-        response.put("documentServerUrl", onlyofficeUrl);
-
-        log.info("Editor config created for file: {}, key: {}", fileName, config.getDocument().getKey());
-
-        return response;
-    }
 }

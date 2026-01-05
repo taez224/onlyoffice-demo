@@ -46,15 +46,15 @@ class KeyUtilsTest {
         @DisplayName("null fileKey는 예외 발생")
         void shouldThrowExceptionForNullFileKey() {
             assertThatThrownBy(() -> KeyUtils.generateEditorKey(null, 1))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("fileKey cannot be null");
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("fileKey cannot be null");
         }
 
         @Test
         @DisplayName("빈 fileKey는 예외 발생")
         void shouldThrowExceptionForBlankFileKey() {
             assertThatThrownBy(() -> KeyUtils.generateEditorKey("  ", 1))
-                .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 
@@ -131,40 +131,6 @@ class KeyUtilsTest {
         void shouldReturnFalseForSpecialCharacters() {
             assertThat(KeyUtils.isValidKey("doc@123")).isFalse();
             assertThat(KeyUtils.isValidKey("file#name")).isFalse();
-        }
-    }
-
-    @Nested
-    @DisplayName("generateFileKey")
-    class GenerateFileKey {
-
-        @Test
-        @DisplayName("파일명과 타임스탬프로 fileKey 생성")
-        void shouldGenerateFileKeyFromFileNameAndTimestamp() {
-            // given
-            String fileName = "document.docx";
-            long timestamp = 1234567890L;
-
-            // when
-            String result = KeyUtils.generateFileKey(fileName, timestamp);
-
-            // then
-            assertThat(result).isEqualTo("documentdocx_1234567890");
-        }
-
-        @Test
-        @DisplayName("긴 파일명은 해시로 축약")
-        void shouldHashLongFileName() {
-            // given
-            String longFileName = "a".repeat(200) + ".docx";
-            long timestamp = 1234567890L;
-
-            // when
-            String result = KeyUtils.generateFileKey(longFileName, timestamp);
-
-            // then
-            assertThat(result.length()).isLessThanOrEqualTo(KeyUtils.MAX_KEY_LENGTH);
-            assertThat(result).contains("_1234567890");
         }
     }
 }

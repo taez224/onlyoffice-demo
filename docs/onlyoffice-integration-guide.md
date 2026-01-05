@@ -2,6 +2,14 @@
 
 이 문서는 OnlyOffice Document Server API 스펙과 현재 구현 상태를 정리한 기술 문서입니다.
 
+**📝 Note**: The "개선 필요 사항" (Improvements Needed) section describes features that have been implemented through Issue #30 (fileKey/UUID migration). The system now uses:
+- UUID-based `fileKey` as the immutable file identifier
+- `editorVersion` that increments after SAVE callbacks
+- `editorKey = fileKey_v{version}` format for Document Server sessions
+- Proper callback handling with version tracking
+
+See [Issue #30](https://github.com/taez224/onlyoffice-demo/issues/30) for implementation details.
+
 ## 목차
 
 - [핵심 개념](#핵심-개념)

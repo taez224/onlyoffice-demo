@@ -23,15 +23,27 @@ Before running, copy `.env.example` to `.env` at repo root and ensure `onlyoffic
 - `service/DocumentService.java`: file I/O inside `storage/`; implements pessimistic locking for atomic callback updates.
 - `service/FileMigrationService.java`: utilities for migrating legacy assets (triggered via `MigrationController`).
 - `sdk/*`: overrides default SDK managers for custom URLs, document keys, permissions, and callbacks.
-- `util/KeyUtils.java`: sanitizes keys (timestamp/UUID) so Document Server versioning works.
+- `util/KeyUtils.java`: UUID-based fileKey generation and editor key versioning (`{fileKey}_v{version}`); sanitizes keys for Document Server spec compliance.
 
 ## API Surface
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET /api/config?fileKey=` | Returns `{ documentServerUrl, config }`. Query param may be file name or UUID; service resolves metadata. |
+| `GET /api/config?fileKey=` | Returns `{ documentServerUrl, config }`. Query param is a required UUID fileKey (e.g., `550e8400-e29b-41d4-a716-446655440000`). |
 | `GET /files/{fileKey}` | Serves binary content with JWT validation. |
 | `POST /callback?fileKey=` | Handles SAVE/FORCESAVE, downloads edited doc from SDK payload URL, and overwrites storage. |
 | `POST /api/migrate` | (Optional tooling) bulk-imports files using `FileMigrationService`. |
+
+## FileKey & Document Identification
+
+Documents are now identified by **fileKey** (UUID) rather than fileName:
+
+- **fileKey**: Unique, immutable UUID generated on upload (via `KeyUtils.generateFileKey()`)
+- **fileName**: Original user-provided filename (may be duplicated across documents)
+- **editorVersion**: Increments after each SAVE callback; enables versioning for Document Server (`editorKey = fileKey_v{version}`)
+
+**Benefits**: Better security (unpredictable identifiers), support for duplicate filenames, and scalability for distributed systems.
+
+**Migration** (Issue #30): Use `POST /api/admin/migration/files` to scan `storage/` and generate fileKeys for legacy files. All new uploads automatically receive UUIDs.
 
 ## Callback Concurrency Control
 
@@ -56,13 +68,15 @@ ONLYOFFICE Document Server may issue concurrent callback requests (e.g., SAVE/FO
 - Mock filesystem interactions via temporary directories; avoid touching real `storage/`.
 
 ## Review Checklist
-1. **Config validity** – `documentUrl`, `callbackUrl`, `key`, and `jwt` must align with Docker hostnames; ensure `CustomUrlManager` updates stay consistent with controllers.
-2. **Security** – reject path traversal (see `KeyUtils`), never log secrets, and keep `.env`-sourced properties outside version control.
-3. **Callbacks** – `CallbackController` should distinguish between `Status.SAVE`, `FORCESAVE`, errors, and return `{ "error": 0 }` on success.
-4. **Storage** – confirm overwrites happen atomically and that migrations or cleanups respect `storage.path`.
-5. **SDK upgrades** – prefer extending SDK managers rather than recreating DTOs; update `OnlyOfficeConfig` when new beans are required.
+1. **FileKey usage** – ensure all endpoints use UUID fileKey (not fileName); verify `DocumentRepository` queries use `findByFileKeyAndDeletedAtIsNull()` for active documents.
+2. **Config validity** – `documentUrl`, `callbackUrl`, `editorKey` (fileKey + version), and `jwt` must align with Docker hostnames; ensure `CustomUrlManager` updates stay consistent with controllers.
+3. **Security** – fileKey validation via `KeyUtils.isValidKey()` (UUID format + ONLYOFFICE spec), reject path traversal, never log secrets, and keep `.env`-sourced properties outside version control.
+4. **Callbacks** – `CallbackController` extracts fileKey from query param, distinguishes between `Status.SAVE` (increments editorVersion), `FORCESAVE` (no version increment), errors, and returns `{ "error": 0 }` on success.
+5. **Storage** – confirm overwrites happen atomically with pessimistic locks; migrations use `FileMigrationService` to generate UUIDs for legacy files.
+6. **SDK upgrades** – prefer extending SDK managers rather than recreating DTOs; update `OnlyOfficeConfig` when new beans are required.
 
 ## Troubleshooting
 - **JWT mismatch**: `onlyoffice.secret` (application.yml) must equal `JWT_SECRET` in `.env` and docker-compose.
 - **Callback failures**: check Docker logs (`docker-compose logs onlyoffice-docs`) and ensure `server.baseUrl` is reachable (`curl http://host.docker.internal:8080/api/health` if added).
 - **Permissions issues**: run `ls -la storage/` to verify host/containers share ownership; adjust volume mappings if callbacks cannot write edits.
+- **Legacy files without fileKey**: run `POST /api/admin/migration/files` to generate UUIDs for files in `storage/`; idempotent (skips already-migrated documents).

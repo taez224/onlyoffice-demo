@@ -3,7 +3,6 @@ package com.example.onlyoffice.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.onlyoffice.model.documenteditor.Config;
 import com.onlyoffice.model.documenteditor.config.Document;
-import com.onlyoffice.model.documenteditor.config.document.DocumentType;
 import com.onlyoffice.model.documenteditor.config.editorconfig.Mode;
 import com.onlyoffice.service.documenteditor.config.ConfigService;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +18,6 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,8 +38,8 @@ class EditorConfigServiceTest {
     private ObjectMapper objectMapper;
 
     private static final String ONLYOFFICE_URL = "http://localhost:9980";
-    private static final String FILE_NAME = "sample.docx";
-    private static final String DOCUMENT_KEY = "sampledocx_v1";
+    private static final String FILE_KEY = "550e8400-e29b-41d4-a716-446655440000";
+    private static final String DOCUMENT_KEY = "550e8400-e29b-41d4-a716-446655440000_v0";
 
     @BeforeEach
     void setUp() {
@@ -51,15 +49,15 @@ class EditorConfigServiceTest {
     }
 
     @Nested
-    @DisplayName("createEditorResponse")
-    class CreateEditorResponse {
+    @DisplayName("createEditorResponseByFileKey")
+    class CreateEditorResponseByFileKey {
 
         @Test
-        @DisplayName("SDK ConfigService를 호출하여 Config 생성")
-        void shouldCallSdkConfigServiceToCreateConfig() {
+        @DisplayName("SDK ConfigService를 fileKey로 호출하여 Config 생성")
+        void shouldCallSdkConfigServiceWithFileKey() {
             // given
             when(sdkConfigService.createConfig(
-                eq(FILE_NAME),
+                eq(FILE_KEY),
                 eq(Mode.EDIT),
                 any(com.onlyoffice.model.documenteditor.config.document.Type.class)
             )).thenReturn(mockConfig);
@@ -67,11 +65,11 @@ class EditorConfigServiceTest {
             when(mockDocument.getKey()).thenReturn(DOCUMENT_KEY);
 
             // when
-            editorConfigService.createEditorResponse(FILE_NAME);
+            editorConfigService.createEditorResponseByFileKey(FILE_KEY);
 
             // then
             verify(sdkConfigService).createConfig(
-                eq(FILE_NAME),
+                eq(FILE_KEY),
                 eq(Mode.EDIT),
                 any(com.onlyoffice.model.documenteditor.config.document.Type.class)
             );
@@ -90,7 +88,7 @@ class EditorConfigServiceTest {
             when(mockDocument.getKey()).thenReturn(DOCUMENT_KEY);
 
             // when
-            Map<String, Object> response = editorConfigService.createEditorResponse(FILE_NAME);
+            Map<String, Object> response = editorConfigService.createEditorResponseByFileKey(FILE_KEY);
 
             // then
             assertThat(response).containsKeys("config", "documentServerUrl");
@@ -109,7 +107,7 @@ class EditorConfigServiceTest {
             when(mockDocument.getKey()).thenReturn(DOCUMENT_KEY);
 
             // when
-            Map<String, Object> response = editorConfigService.createEditorResponse(FILE_NAME);
+            Map<String, Object> response = editorConfigService.createEditorResponseByFileKey(FILE_KEY);
 
             // then
             assertThat(response.get("documentServerUrl")).isEqualTo(ONLYOFFICE_URL);
@@ -128,7 +126,7 @@ class EditorConfigServiceTest {
             when(mockDocument.getKey()).thenReturn(DOCUMENT_KEY);
 
             // when
-            Map<String, Object> response = editorConfigService.createEditorResponse(FILE_NAME);
+            Map<String, Object> response = editorConfigService.createEditorResponseByFileKey(FILE_KEY);
 
             // then
             assertThat(response.get("config")).isNotNull();
@@ -136,8 +134,8 @@ class EditorConfigServiceTest {
         }
 
         @Test
-        @DisplayName("다양한 파일명으로 Config 생성")
-        void shouldCreateConfigForVariousFileNames() {
+        @DisplayName("다양한 fileKey UUID로 Config 생성")
+        void shouldCreateConfigForVariousFileKeys() {
             // given
             when(sdkConfigService.createConfig(
                 anyString(),
@@ -147,23 +145,22 @@ class EditorConfigServiceTest {
             when(mockConfig.getDocument()).thenReturn(mockDocument);
             when(mockDocument.getKey()).thenReturn(DOCUMENT_KEY);
 
-            String[] fileNames = {"document.docx", "spreadsheet.xlsx", "presentation.pptx"};
+            String[] fileKeys = {
+                "550e8400-e29b-41d4-a716-446655440000",
+                "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+            };
 
-            for (String fileName : fileNames) {
+            for (String fileKey : fileKeys) {
                 // when
-                Map<String, Object> response = editorConfigService.createEditorResponse(fileName);
+                Map<String, Object> response = editorConfigService.createEditorResponseByFileKey(fileKey);
 
                 // then
                 assertThat(response)
-                    .as("Response for %s should contain required keys", fileName)
+                    .as("Response for fileKey %s should contain required keys", fileKey)
                     .containsKeys("config", "documentServerUrl");
             }
         }
-    }
-
-    @Nested
-    @DisplayName("Integration with SDK")
-    class IntegrationWithSdk {
 
         @Test
         @DisplayName("Mode.EDIT로 Config 생성")
@@ -178,11 +175,11 @@ class EditorConfigServiceTest {
             when(mockDocument.getKey()).thenReturn(DOCUMENT_KEY);
 
             // when
-            editorConfigService.createEditorResponse(FILE_NAME);
+            editorConfigService.createEditorResponseByFileKey(FILE_KEY);
 
             // then
             verify(sdkConfigService).createConfig(
-                eq(FILE_NAME),
+                eq(FILE_KEY),
                 eq(Mode.EDIT),
                 any(com.onlyoffice.model.documenteditor.config.document.Type.class)
             );
@@ -201,11 +198,11 @@ class EditorConfigServiceTest {
             when(mockDocument.getKey()).thenReturn(DOCUMENT_KEY);
 
             // when
-            editorConfigService.createEditorResponse(FILE_NAME);
+            editorConfigService.createEditorResponseByFileKey(FILE_KEY);
 
             // then
             verify(sdkConfigService).createConfig(
-                eq(FILE_NAME),
+                eq(FILE_KEY),
                 eq(Mode.EDIT),
                 eq(com.onlyoffice.model.documenteditor.config.document.Type.DESKTOP)
             );

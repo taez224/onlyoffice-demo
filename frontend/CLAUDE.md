@@ -22,10 +22,11 @@ Vite proxies `/api` to `http://localhost:8080` via `vite.config.ts`; adjust when
 - `index.html`, `vite.config.ts` – Vite entry and proxy configuration.
 
 ## Data Flow
-1. User opens `http://localhost:5173?fileKey=<uuid-or-name>`.
-2. `App.tsx` validates the query param and displays an error if absent.
-3. `Editor.tsx` issues `GET /api/config?fileKey=...` (proxied to backend) and stores `{ documentServerUrl, config }`.
+1. User opens `http://localhost:5173?fileKey=550e8400-e29b-41d4-a716-446655440000` (UUID).
+2. `App.tsx` validates the query param (fileKey must be present) and displays an error if absent.
+3. `Editor.tsx` issues `GET /api/config?fileKey={uuid}` (proxied to backend) and stores `{ documentServerUrl, config }`.
 4. When loaded, `DocumentEditor` connects to the Document Server URL and renders the document UI.
+5. Document Server uses the UUID fileKey to download and track changes via callbacks.
 
 ## Coding Guidelines
 - Keep React components functional with hooks; TypeScript props should be explicit (`interface EditorProps { fileKey: string }`).
@@ -38,6 +39,6 @@ Vite proxies `/api` to `http://localhost:8080` via `vite.config.ts`; adjust when
 - When adding logic (e.g., multi-file dashboards), introduce Vitest + React Testing Library specs under `src/**/*.test.tsx` and mock Axios responses.
 
 ## Troubleshooting
-- **Config fetch fails**: check Vite proxy configuration and backend availability (`curl http://localhost:8080/api/config?fileKey=sample.docx`).
+- **Config fetch fails**: check Vite proxy configuration and backend availability (`curl http://localhost:8080/api/config?fileKey=550e8400-e29b-41d4-a716-446655440000`). Use a valid UUID fileKey from upload response or migration endpoint.
 - **Editor not loading**: ensure `DocumentEditor` receives both `documentServerUrl` and `config` fields; watch browser console for JWT errors.
 - **CORS/proxy issues**: update `vite.config.ts` `server.proxy['/api']` to the correct backend host/port.
