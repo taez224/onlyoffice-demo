@@ -43,3 +43,9 @@ minio:
   secretKey: ${MINIO_ROOT_PASSWORD:minioadmin_password}
   bucket: ${MINIO_BUCKET:onlyoffice-documents}
   presigned-url-expiry: 3600  # 1시간 (초)
+
+# Callback Executor Configuration
+callback:
+  executor:
+    idle-timeout-minutes: 30      # Cleanup idle executors after 30 minutes
+    cleanup-interval-minutes: 5   # Run cleanup job every 5 minutes

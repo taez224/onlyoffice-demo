@@ -2,6 +2,8 @@ package com.example.onlyoffice.service;
 
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -32,9 +34,18 @@ public class CallbackQueueService {
     private static final long SHUTDOWN_TIMEOUT_SECONDS = 30;
     private static final long DEFAULT_TASK_TIMEOUT_SECONDS = 60;
 
+    @Value("${callback.executor.idle-timeout-minutes:30}")
+    private long idleTimeoutMinutes;
+
+    @Value("${callback.executor.cleanup-interval-minutes:5}")
+    private long cleanupIntervalMinutes;
+
     // 문서별 싱글 스레드 executor 관리
     // 동일 문서의 callback은 순차 처리, 다른 문서는 병렬 처리
     private final Map<String, ExecutorService> documentQueues = new ConcurrentHashMap<>();
+
+    // Executor 마지막 접근 시간 추적 (idle 정리용)
+    private final Map<String, Long> lastAccessTime = new ConcurrentHashMap<>();
 
     /**
      * Callback 작업을 문서별 큐에 제출하고 완료까지 대기합니다.
@@ -73,6 +84,9 @@ public class CallbackQueueService {
 
         // 문서별 executor 생성 (없으면 생성, 있으면 기존 사용)
         ExecutorService executor = getOrCreateExecutor(fileKey);
+
+        // 마지막 접근 시간 업데이트 (idle cleanup용)
+        lastAccessTime.put(fileKey, System.currentTimeMillis());
 
         Future<T> future = executor.submit(task);
 
@@ -156,14 +170,47 @@ public class CallbackQueueService {
             }
 
             documentQueues.clear();
+            lastAccessTime.clear();
         } catch (InterruptedException e) {
             log.warn("Shutdown interrupted, forcing immediate shutdown");
             documentQueues.values().forEach(ExecutorService::shutdownNow);
             documentQueues.clear();
+            lastAccessTime.clear();
             Thread.currentThread().interrupt();
         }
 
         log.info("CallbackQueueService shutdown complete");
+    }
+
+    /**
+     * 30분 이상 idle한 executor를 정리하는 scheduled job (5분마다 실행).
+     */
+    @Scheduled(fixedDelayString = "${callback.executor.cleanup-interval-minutes:5}", timeUnit = TimeUnit.MINUTES)
+    public void cleanupIdleExecutors() {
+        long now = System.currentTimeMillis();
+        long idleThresholdMs = TimeUnit.MINUTES.toMillis(idleTimeoutMinutes);
+
+        documentQueues.entrySet().removeIf(entry -> {
+            String fileKey = entry.getKey();
+            Long lastAccess = lastAccessTime.get(fileKey);
+
+            if (lastAccess != null && (now - lastAccess) > idleThresholdMs) {
+                ExecutorService executor = entry.getValue();
+                executor.shutdown();
+                try {
+                    if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                        executor.shutdownNow();
+                    }
+                } catch (InterruptedException e) {
+                    executor.shutdownNow();
+                    Thread.currentThread().interrupt();
+                }
+                lastAccessTime.remove(fileKey);
+                log.info("Cleaned up idle executor for fileKey: {}", fileKey);
+                return true;
+            }
+            return false;
+        });
     }
 
     /**
