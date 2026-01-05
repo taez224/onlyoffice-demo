@@ -1,5 +1,9 @@
 # ONLYOFFICE 2편: Document.key 관리와 DB 연동으로 실전 시스템 만들기
 
+**📝 Note**: This blog post documents the development journey. The system has since been updated with fileKey migration (see [Issue #30](https://github.com/taez224/onlyoffice-demo/issues/30)) and now uses UUID-based fileKey with editorVersion. Code examples may reference older patterns.
+
+---
+
 ## 📄 시리즈 정보
 
 - **1편**: ONLYOFFICE 기본 연동 (수동 Config, 로컬 파일)
