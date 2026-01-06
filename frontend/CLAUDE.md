@@ -1,44 +1,56 @@
-# Frontend – React 18 + Vite
+# Frontend - Next.js 16 + React 19 (App Router)
 
 ## Purpose & Stack
-- Lightweight Vite + React 18 + TypeScript 5 client that embeds `@onlyoffice/document-editor-react` (v2.1.1) and fetches config from the Spring Boot backend.
-- Axios handles `/api/config` calls; styling is minimal (CSS modules in `App.css`/`index.css`).
+- Next.js 16 + React 19 + TypeScript 5 application with App Router
+- Embeds `@onlyoffice/document-editor-react` for document editing
+- TanStack Query for server state management, TanStack Table for data tables
+- shadcn/ui + Tailwind CSS for styling
+- Axios handles API calls to Spring Boot backend
 
 ## Run, Build, Test
 ```bash
 cd frontend
 pnpm install            # once
-pnpm dev                # http://localhost:5173
-pnpm build && pnpm preview
-pnpm lint               # eslint + typescript-eslint rules
+pnpm dev                # http://localhost:3000
+pnpm build && pnpm start
+pnpm lint               # eslint rules
 ```
-Vite proxies `/api` to `http://localhost:8080` via `vite.config.ts`; adjust when backend host changes.
+Next.js rewrites `/api` to `http://localhost:8080` via `next.config.ts`; adjust when backend host changes.
 
 ## Key Files
-- `src/main.tsx` – boots React with `<App />`.
-- `src/App.tsx` – reads `fileKey` from `window.location.search` and conditionally renders `<Editor />`.
-- `src/components/Editor.tsx` – client wrapper around `DocumentEditor`; fetches config via Axios and renders the SDK component with lifecycle hooks.
-- `src/assets/` – static assets (logos, etc.).
-- `index.html`, `vite.config.ts` – Vite entry and proxy configuration.
+- `src/app/layout.tsx` - Root layout with QueryClientProvider
+- `src/app/page.tsx` - Document list page (/)
+- `src/app/editor/[fileKey]/page.tsx` - Editor page (/editor/[fileKey])
+- `src/components/providers/query-provider.tsx` - TanStack Query setup
+- `src/components/ui/` - shadcn/ui components
+- `src/lib/utils.ts` - Utility functions (cn helper)
 
 ## Data Flow
-1. User opens `http://localhost:5173?fileKey=550e8400-e29b-41d4-a716-446655440000` (UUID).
-2. `App.tsx` validates the query param (fileKey must be present) and displays an error if absent.
-3. `Editor.tsx` issues `GET /api/config?fileKey={uuid}` (proxied to backend) and stores `{ documentServerUrl, config }`.
-4. When loaded, `DocumentEditor` connects to the Document Server URL and renders the document UI.
-5. Document Server uses the UUID fileKey to download and track changes via callbacks.
+1. User opens `http://localhost:3000` to see document list
+2. Document list fetched via TanStack Query from `GET /api/documents`
+3. User clicks document -> navigates to `/editor/[fileKey]`
+4. Editor page fetches config via `GET /api/documents/{fileKey}/config`
+5. ONLYOFFICE DocumentEditor renders with JWT-signed config
+6. Document Server handles editing and callbacks
+
+## Routing Structure
+- `/` - Document list with upload, delete functionality
+- `/editor/[fileKey]` - ONLYOFFICE editor for document with given fileKey
 
 ## Coding Guidelines
-- Keep React components functional with hooks; TypeScript props should be explicit (`interface EditorProps { fileKey: string }`).
-- Avoid storing secrets or backend URLs in the bundle; rely on the `/api` proxy or `import.meta.env` variables for overrides.
-- Document Editor needs full viewport height; maintain inline styles or move to CSS with `height: 100vh`.
-- Error and loading states must remain user-friendly (spinner + actionable message).
+- Use App Router conventions: `page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`
+- Client components must have `'use client'` directive at top
+- Server components are default; prefer them for data fetching
+- ONLYOFFICE editor must be client component (uses browser APIs)
+- Use TanStack Query for all API calls; avoid useEffect for data fetching
+- Props interfaces should be explicit TypeScript types
 
 ## Testing Expectations
-- No formal UI tests exist yet; at minimum, run `pnpm lint` before commits.
-- When adding logic (e.g., multi-file dashboards), introduce Vitest + React Testing Library specs under `src/**/*.test.tsx` and mock Axios responses.
+- Run `pnpm lint` before commits
+- Add tests under `src/**/*.test.tsx` using Vitest + React Testing Library
+- Mock API responses for component tests
 
 ## Troubleshooting
-- **Config fetch fails**: check Vite proxy configuration and backend availability (`curl http://localhost:8080/api/config?fileKey=550e8400-e29b-41d4-a716-446655440000`). Use a valid UUID fileKey from upload response or migration endpoint.
-- **Editor not loading**: ensure `DocumentEditor` receives both `documentServerUrl` and `config` fields; watch browser console for JWT errors.
-- **CORS/proxy issues**: update `vite.config.ts` `server.proxy['/api']` to the correct backend host/port.
+- **API calls fail**: Check `next.config.ts` rewrites and backend availability
+- **Editor not loading**: Ensure component is client-side (`'use client'`); check JWT config
+- **Hydration errors**: Verify client/server component boundaries are correct
