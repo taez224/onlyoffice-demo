@@ -1,181 +1,223 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { 
-  ArrowLeft, 
-  Save, 
-  Download, 
-  CheckCircle2, 
-  Loader2, 
-  FileText, 
-  ShieldCheck, 
+import { useState, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { DocumentEditor } from '@onlyoffice/document-editor-react';
+import {
+  ArrowLeft,
+  Download,
+  Loader2,
+  FileText,
+  FileSpreadsheet,
+  Presentation,
+  ShieldCheck,
   Wifi,
-  Clock
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
+  Clock,
+  AlertCircle,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useEditorConfig } from '@/hooks/use-editor-config';
+import { useDocumentEditor } from '@/hooks/use-document-editor';
+import { useCurrentTime } from '@/hooks/use-current-time';
+import type { DocumentType } from '@/types/document';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function getDocumentIcon(documentType: DocumentType) {
+  const iconProps = { size: 16 };
+  switch (documentType) {
+    case 'word':
+      return <FileText {...iconProps} className="text-blue-600" />;
+    case 'cell':
+      return <FileSpreadsheet {...iconProps} className="text-emerald-600" />;
+    case 'slide':
+      return <Presentation {...iconProps} className="text-orange-600" />;
+    default:
+      return <FileText {...iconProps} className="text-blue-600" />;
+  }
+}
+
+function ErrorState({ onBack, onGoHome }: { onBack: () => void; onGoHome: () => void }) {
+  return (
+    <div className="flex flex-col h-screen w-full bg-background overflow-hidden font-sans">
+      <header className="h-14 border-b border-border flex items-center px-4 bg-background z-10 shrink-0">
+        <Button
+          onClick={onBack}
+          variant="ghost"
+          className="h-10 rounded-none hover:bg-muted text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft size={20} className="mr-2" />
+          Back
+        </Button>
+      </header>
+      <main className="flex-1 flex items-center justify-center">
+        <div className="text-center p-8 max-w-md">
+          <div className="w-16 h-16 mx-auto mb-6 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center">
+            <AlertCircle size={28} className="text-red-600" />
+          </div>
+          <h2 className="text-lg font-bold text-foreground mb-2">문서를 불러올 수 없습니다</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            문서가 존재하지 않거나 접근 권한이 없습니다.
+          </p>
+          <Button onClick={onGoHome} variant="outline">
+            문서 목록으로 돌아가기
+          </Button>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function LoadingState({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="flex flex-col h-screen w-full bg-background overflow-hidden font-sans">
+      <header className="h-14 border-b border-border flex items-center px-4 bg-background z-10 shrink-0">
+        <Button
+          onClick={onBack}
+          variant="ghost"
+          className="h-10 rounded-none hover:bg-muted text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft size={20} className="mr-2" />
+          Back
+        </Button>
+      </header>
+      <main className="flex-1 flex items-center justify-center bg-muted/10">
+        <div className="text-center p-8 max-w-md animate-in zoom-in-95 duration-500 fade-in">
+          <div className="relative w-16 h-16 mx-auto mb-6">
+            <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900/20 rounded-full animate-ping opacity-20" />
+            <div className="relative w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center border border-blue-100 dark:border-blue-800">
+              <Loader2 size={28} className="text-blue-600 animate-spin" />
+            </div>
+          </div>
+          <h2 className="text-lg font-bold text-foreground mb-2">Loading Editor...</h2>
+          <p className="text-sm text-muted-foreground">Initializing document environment</p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function EditorFooter({ currentTime }: { currentTime: string }) {
+  return (
+    <footer className="h-8 bg-foreground text-background border-t border-border flex items-center justify-between px-4 text-[10px] font-mono select-none z-20">
+      <div className="flex items-center gap-6 h-full">
+        <div className="flex items-center gap-2 opacity-90">
+          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="uppercase tracking-widest font-bold">CONNECTED</span>
+        </div>
+        <div className="w-px h-3 bg-background/20" />
+        <span className="opacity-60">READ-WRITE</span>
+      </div>
+      <div className="flex items-center gap-6 h-full">
+        <div className="flex items-center gap-2 opacity-60">
+          <Wifi size={12} />
+          <span>Online</span>
+        </div>
+        <div className="w-px h-3 bg-background/20" />
+        <div className="flex items-center gap-2 opacity-60">
+          <ShieldCheck size={12} />
+          <span>Secure</span>
+        </div>
+        <div className="w-px h-3 bg-background/20" />
+        <div className="flex items-center gap-2 min-w-[70px] justify-end opacity-90 font-bold">
+          <Clock size={12} />
+          <span suppressHydrationWarning>{currentTime}</span>
+        </div>
+      </div>
+    </footer>
+  );
+}
 
 export default function EditorPage() {
-  const params = useParams()
-  const router = useRouter()
-  const fileKey = params.id as string
-  
-  // Simulation states for "Mission Control" feel
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const [lastSaved, setLastSaved] = useState<Date | null>(null)
-  const [currentTime, setCurrentTime] = useState<string>("--:--:--")
+  const params = useParams();
+  const router = useRouter();
+  const fileKey = params.id as string;
+  const isValidFileKey = UUID_REGEX.test(fileKey);
 
-  // Clock Ticker
-  useEffect(() => {
-    setCurrentTime(new Date().toLocaleTimeString('en-US', { hour12: false }));
-    const timer = setInterval(() => {
-        setCurrentTime(new Date().toLocaleTimeString('en-US', { hour12: false }))
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [])
+  const [sessionTimestamp] = useState(() => Date.now());
+  const editorId = `editor-${fileKey}-${sessionTimestamp}`;
 
-  // Save Handler Simulation
-  const handleSave = () => {
-    setSaveStatus('saving')
-    // Simulate Network Request
-    setTimeout(() => {
-      setSaveStatus('saved')
-      setLastSaved(new Date())
-      // Reset to idle after 2 seconds
-      setTimeout(() => setSaveStatus('idle'), 2000)
-    }, 1500)
+  const { data: editorConfig, isLoading, error } = useEditorConfig(isValidFileKey ? fileKey : '');
+  const { destroyEditor, onAppReady } = useDocumentEditor({ editorId });
+  const currentTime = useCurrentTime();
+
+  const onLoadComponentError = (errorCode: number, errorDescription: string) => {
+    console.error('[ONLYOFFICE] Load Error:', errorCode, errorDescription);
+  };
+
+  const handleBack = () => {
+    destroyEditor();
+    router.back();
+  };
+
+  const handleGoHome = () => {
+    destroyEditor();
+    router.push('/');
+  };
+
+  const documentServerUrl = useMemo(() => {
+    if (!editorConfig) return '';
+    const rawUrl = editorConfig.documentServerUrl;
+    return rawUrl.endsWith('/') ? rawUrl.slice(0, -1) : rawUrl;
+  }, [editorConfig]);
+
+  if (!isValidFileKey || error) {
+    return <ErrorState onBack={handleBack} onGoHome={handleGoHome} />;
   }
+
+  if (isLoading || !editorConfig) {
+    return <LoadingState onBack={handleBack} />;
+  }
+
+  const { config } = editorConfig;
+  const documentTitle = config.document?.title || 'Untitled';
+  const documentType = config.documentType || 'word';
 
   return (
     <div className="flex flex-col h-screen w-full bg-background overflow-hidden font-sans">
-      
-      {/* 1. Mission Control Header */}
       <header className="h-14 border-b border-border flex items-center justify-between px-0 bg-background z-10 shrink-0">
-        
-        {/* Left: Navigation & Info */}
         <div className="flex items-center h-full">
-          <Button 
-            onClick={() => router.back()} 
-            variant="ghost" 
+          <Button
+            onClick={handleBack}
+            variant="ghost"
             className="h-full w-14 rounded-none border-r border-border hover:bg-muted text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft size={20} />
           </Button>
-
           <div className="px-6 flex flex-col justify-center h-full">
             <div className="flex items-center gap-3">
-               <FileText size={16} className="text-blue-600" />
-               <span className="font-bold text-sm tracking-tight text-foreground">Technical_Spec_v2.docx</span>
-               <span className="px-1.5 py-0.5 rounded-sm bg-muted text-[10px] font-mono text-muted-foreground border border-border flex items-center gap-1">
-                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                 v2.4
-               </span>
+              {getDocumentIcon(documentType)}
+              <span className="font-bold text-sm tracking-tight text-foreground">
+                {documentTitle}
+              </span>
             </div>
           </div>
         </div>
-
-        {/* Right: Actions */}
         <div className="flex items-center h-full px-4 gap-3">
-           
-           {/* Last Saved Indicator (Fade In/Out) */}
-           <div className={`hidden md:flex items-center gap-1.5 text-xs text-muted-foreground mr-2 transition-opacity duration-300 ${lastSaved ? 'opacity-100' : 'opacity-0'}`}>
-              <CheckCircle2 size={12} className="text-emerald-500" />
-              <span>Saved {lastSaved?.toLocaleTimeString()}</span>
-           </div>
-
-           <div className="h-6 w-px bg-border mx-1 hidden md:block"></div>
-
-           <Button variant="outline" size="sm" className="h-9 rounded-none border-border hover:bg-muted gap-2 text-xs font-medium hidden md:flex">
-             <Download size={14} />
-             Export
-           </Button>
-
-           <Button 
-             onClick={handleSave}
-             disabled={saveStatus === 'saving'}
-             className={`h-9 rounded-none min-w-[100px] text-xs font-bold gap-2 transition-all duration-200 border border-transparent ${
-                saveStatus === 'saved' 
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500' 
-                : 'bg-primary text-primary-foreground hover:bg-primary/90'
-             }`}
-           >
-             {saveStatus === 'saving' ? (
-               <>
-                 <Loader2 size={14} className="animate-spin" />
-                 Saving...
-               </>
-             ) : saveStatus === 'saved' ? (
-               <>
-                 <CheckCircle2 size={14} />
-                 Saved
-               </>
-             ) : (
-               <>
-                 <Save size={14} />
-                 Save
-               </>
-             )}
-           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-none border-border hover:bg-muted gap-2 text-xs font-medium hidden md:flex"
+          >
+            <Download size={14} />
+            Export
+          </Button>
         </div>
       </header>
 
-      {/* 2. Main Editor Area */}
-      <main className="flex-1 relative bg-muted/10 flex flex-col">
-        {/* Editor Placeholder / Container */}
-        <div className="flex-1 w-full h-full bg-white relative flex flex-col items-center justify-center">
-           {/* In a real app, <DocumentEditor /> goes here */}
-           <div className="text-center p-8 max-w-md animate-in zoom-in-95 duration-500 fade-in">
-              <div className="relative w-16 h-16 mx-auto mb-6">
-                 <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900/20 rounded-full animate-ping opacity-20"></div>
-                 <div className="relative w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center border border-blue-100 dark:border-blue-800">
-                    <Loader2 size={28} className="text-blue-600 animate-spin" />
-                 </div>
-              </div>
-              
-              <h2 className="text-lg font-bold text-foreground mb-2">Loading Editor...</h2>
-              <p className="text-sm text-muted-foreground">
-                Initializing document environment
-              </p>
-           </div>
-        </div>
+      <main className="flex-1 relative bg-muted/10">
+        <DocumentEditor
+          key={editorId}
+          id={editorId}
+          documentServerUrl={documentServerUrl}
+          config={config}
+          events_onAppReady={onAppReady}
+          onLoadComponentError={onLoadComponentError}
+          shardkey={false}
+        />
       </main>
 
-      {/* 3. Industrial Status Bar */}
-      <footer className="h-8 bg-foreground text-background border-t border-border flex items-center justify-between px-4 text-[10px] font-mono select-none z-20">
-         {/* Left Status */}
-         <div className="flex items-center gap-6 h-full">
-            <div className="flex items-center gap-2 opacity-90">
-               <div className={`w-2 h-2 rounded-full transition-colors duration-300 ${saveStatus === 'saving' ? 'bg-orange-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-               <span className="uppercase tracking-widest font-bold">{saveStatus === 'saving' ? 'PROCESSING' : 'READY'}</span>
-            </div>
-            
-            <div className="w-px h-3 bg-background/20"></div>
-            
-            <span className="opacity-60">READ-WRITE</span>
-         </div>
-
-         {/* Right Telemetry */}
-         <div className="flex items-center gap-6 h-full">
-             <div className="flex items-center gap-2 opacity-60">
-               <Wifi size={12} />
-               <span>Online</span>
-             </div>
-
-             <div className="w-px h-3 bg-background/20"></div>
-
-             <div className="flex items-center gap-2 opacity-60">
-               <ShieldCheck size={12} />
-               <span>Secure</span>
-             </div>
-
-             <div className="w-px h-3 bg-background/20"></div>
-
-             <div className="flex items-center gap-2 min-w-[70px] justify-end opacity-90 font-bold">
-               <Clock size={12} />
-               <span suppressHydrationWarning>{currentTime}</span>
-             </div>
-         </div>
-      </footer>
+      <EditorFooter currentTime={currentTime} />
     </div>
-  )
+  );
 }
