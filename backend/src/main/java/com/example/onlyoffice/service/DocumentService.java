@@ -15,11 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.FilterInputStream;
-import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
-import java.net.URLConnection;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -33,14 +29,12 @@ public class DocumentService {
 
     private static final String DEFAULT_STORAGE_PREFIX = "documents";
     private static final String DEFAULT_UPLOADER = "anonymous";
-    private static final String DEFAULT_CONTENT_TYPE = "application/octet-stream";
     private static final Sort ACTIVE_DOCUMENT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
-    private static final int CONNECTION_TIMEOUT_MS = 10_000; // 10 seconds
-    private static final int READ_TIMEOUT_MS = 60_000; // 60 seconds
 
     private final DocumentRepository documentRepository;
     private final FileSecurityService fileSecurityService;
     private final MinioStorageService storageService;
+    private final UrlDownloadService urlDownloadService;
 
     @Transactional(readOnly = true)
     public Optional<Document> findByFileKey(String fileKey) {
@@ -288,27 +282,14 @@ public class DocumentService {
         log.info("Downloading file from {} for fileKey {}", downloadUrl, document.getFileKey());
 
         try {
-            URLConnection connection = URI.create(downloadUrl).toURL().openConnection();
-            connection.setConnectTimeout(CONNECTION_TIMEOUT_MS);
-            connection.setReadTimeout(READ_TIMEOUT_MS);
-            long contentLength = connection.getContentLengthLong();
-            String contentType = connection.getContentType();
-            if (!StringUtils.hasText(contentType)) {
-                contentType = DEFAULT_CONTENT_TYPE;
-            }
+            UrlDownloadService.DownloadResult result = urlDownloadService.downloadAndSave(
+                    downloadUrl, document.getStoragePath());
 
-            try (ByteCountingInputStream inputStream = new ByteCountingInputStream(connection.getInputStream())) {
-                storageService.uploadStream(inputStream, contentLength, contentType, document.getStoragePath());
-
-                long uploadedSize = inputStream.getBytesRead();
-                if (uploadedSize > 0) {
-                    document.setFileSize(uploadedSize);
-                } else if (contentLength > 0) {
-                    document.setFileSize(contentLength);
-                }
-                documentRepository.save(document);
-                log.info("File saved successfully for fileKey: {}", document.getFileKey());
+            if (result.fileSize() > 0) {
+                document.setFileSize(result.fileSize());
             }
+            documentRepository.save(document);
+            log.info("File saved successfully for fileKey: {}", document.getFileKey());
         } catch (Exception e) {
             log.error("Error downloading file from {}", downloadUrl, e);
             throw new RuntimeException("Failed to save document from URL", e);
@@ -376,36 +357,5 @@ public class DocumentService {
 
     private String resolveCreatedBy(String createdBy) {
         return StringUtils.hasText(createdBy) ? createdBy : DEFAULT_UPLOADER;
-    }
-
-    private static class ByteCountingInputStream extends FilterInputStream {
-
-        private long bytesRead;
-
-        protected ByteCountingInputStream(InputStream in) {
-            super(in);
-        }
-
-        @Override
-        public int read() throws IOException {
-            int result = super.read();
-            if (result >= 0) {
-                bytesRead++;
-            }
-            return result;
-        }
-
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            int result = super.read(b, off, len);
-            if (result > 0) {
-                bytesRead += result;
-            }
-            return result;
-        }
-
-        long getBytesRead() {
-            return bytesRead;
-        }
     }
 }

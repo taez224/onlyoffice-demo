@@ -42,13 +42,16 @@ class DocumentServiceTest {
     private MinioStorageService storageService;
 
     @Mock
+    private UrlDownloadService urlDownloadService;
+
+    @Mock
     private MultipartFile multipartFile;
 
     private DocumentService documentService;
 
     @BeforeEach
     void setUp() {
-        documentService = new DocumentService(documentRepository, fileSecurityService, storageService);
+        documentService = new DocumentService(documentRepository, fileSecurityService, storageService, urlDownloadService);
     }
 
     @Test
@@ -308,36 +311,78 @@ class DocumentServiceTest {
     }
 
     @Test
-    @DisplayName("processCallbackSave - 문서 조회 후 URL 다운로드 시도")
-    void processCallbackSave_findsDocumentAndAttemptsDownload() {
+    @DisplayName("processCallbackSave - 성공 시 버전을 증가시킨다")
+    void processCallbackSave_incrementsVersionOnSuccess() {
+        // given
         Document document = buildDocument();
         document.setEditorVersion(1);
         when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
                 .thenReturn(Optional.of(document));
+        when(urlDownloadService.downloadAndSave(anyString(), anyString()))
+                .thenReturn(new UrlDownloadService.DownloadResult(2048L));
+        when(documentRepository.save(document)).thenReturn(document);
 
-        // saveDocumentFromUrl은 URL 연결이 필요하므로 예외 발생 예상
+        // when
+        documentService.processCallbackSave("http://docs-server/doc.docx", "file-key");
+
+        // then
+        assertThat(document.getEditorVersion()).isEqualTo(2);
+        assertThat(document.getFileSize()).isEqualTo(2048L);
+        verify(documentRepository, times(2)).save(document); // saveDocumentFromUrl + incrementVersion
+    }
+
+    @Test
+    @DisplayName("processCallbackForceSave - 성공 시 버전을 유지한다")
+    void processCallbackForceSave_keepsVersionOnSuccess() {
+        // given
+        Document document = buildDocument();
+        document.setEditorVersion(3);
+        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+                .thenReturn(Optional.of(document));
+        when(urlDownloadService.downloadAndSave(anyString(), anyString()))
+                .thenReturn(new UrlDownloadService.DownloadResult(4096L));
+        when(documentRepository.save(document)).thenReturn(document);
+
+        // when
+        documentService.processCallbackForceSave("http://docs-server/doc.docx", "file-key");
+
+        // then
+        assertThat(document.getEditorVersion()).isEqualTo(3); // 버전 유지
+        assertThat(document.getFileSize()).isEqualTo(4096L);
+        verify(documentRepository, times(1)).save(document); // saveDocumentFromUrl만
+    }
+
+    @Test
+    @DisplayName("processCallbackSave - URL 다운로드 실패 시 예외 발생")
+    void processCallbackSave_throwsWhenDownloadFails() {
+        Document document = buildDocument();
+        document.setEditorVersion(1);
+        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+                .thenReturn(Optional.of(document));
+        when(urlDownloadService.downloadAndSave(anyString(), anyString()))
+                .thenThrow(new RuntimeException("Download failed"));
+
         assertThatThrownBy(() -> documentService.processCallbackSave("http://invalid-url/doc.docx", "file-key"))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Failed to save document from URL");
 
-        // 문서 조회는 성공했어야 함
         verify(documentRepository).findWithLockByFileKeyAndDeletedAtIsNull("file-key");
     }
 
     @Test
-    @DisplayName("processCallbackForceSave - 문서 조회 후 URL 다운로드 시도")
-    void processCallbackForceSave_findsDocumentAndAttemptsDownload() {
+    @DisplayName("processCallbackForceSave - URL 다운로드 실패 시 예외 발생")
+    void processCallbackForceSave_throwsWhenDownloadFails() {
         Document document = buildDocument();
         document.setEditorVersion(1);
         when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
                 .thenReturn(Optional.of(document));
+        when(urlDownloadService.downloadAndSave(anyString(), anyString()))
+                .thenThrow(new RuntimeException("Download failed"));
 
-        // saveDocumentFromUrl은 URL 연결이 필요하므로 예외 발생 예상
         assertThatThrownBy(() -> documentService.processCallbackForceSave("http://invalid-url/doc.docx", "file-key"))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Failed to save document from URL");
 
-        // 문서 조회는 성공했어야 함
         verify(documentRepository).findWithLockByFileKeyAndDeletedAtIsNull("file-key");
     }
 
