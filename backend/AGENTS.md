@@ -52,7 +52,7 @@ ONLYOFFICE Document Server may issue concurrent callback requests (e.g., SAVE/FO
 - **CallbackQueueService**: Maintains a `Map<String, ExecutorService>` with one single-threaded executor per `fileKey`.
   - **Same document**: callbacks queued sequentially on the document's executor, preventing concurrent writes.
   - **Different documents**: callbacks execute in parallel across separate executors for optimal performance.
-
+  
 - **Pessimistic Locking**: `DocumentRepository.findWithLockByFileKeyAndDeletedAtIsNull()` acquires `PESSIMISTIC_WRITE` lock (3s timeout) during `processCallbackSave`/`processCallbackForceSave` to ensure atomic file overwrites and version updates.
 
 - **Graceful Shutdown**: Service awaits pending tasks for 30 seconds; forces shutdown if timeout exceeded.

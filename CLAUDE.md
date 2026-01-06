@@ -1,7 +1,7 @@
 # Claude Code Review Guide
 
 ## Project Snapshot
-- Spring Boot 3.3 (Java 21) backend + React 18/Vite frontend embedding ONLYOFFICE Document Server 9.1 via the Java SDK 1.7.0.
+- Spring Boot 3.5.8 (Java 21) backend + React 18/Vite frontend embedding ONLYOFFICE Document Server 9.1 via the Java SDK 1.7.0.
 - Storage is filesystem-based (`storage/`) and mounted for the Document Server container; docker-compose also provisions PostgreSQL + MinIO for future persistence.
 - JWT auth is enforced between backend and Document Server; `.env` defines shared secrets and infra credentials.
 - **Documents identified by UUID fileKey** (not fileName); see [Issue #30](https://github.com/taez224/onlyoffice-demo/issues/30) for migration details.
@@ -20,7 +20,7 @@ Documents use **UUID-based fileKey** as the primary identifier:
 2. Backend creates config via SDK `ConfigService`, signs it through `JwtManager`, and returns URLs pointing to `host.docker.internal:8080`.
 3. Document Server downloads `/files/{fileKey}`, users edit collaboratively, and callbacks hit `/callback?fileKey={uuid}`.
 4. Backend downloads the edited asset from the callback payload and overwrites `storage/{fileName}` while incrementing `editorVersion`.
-Ensure callback URLs remain reachable from inside Docker; regressions here block saving.
+   Ensure callback URLs remain reachable from inside Docker; regressions here block saving.
 
 ## Build & Test Commands
 ```bash

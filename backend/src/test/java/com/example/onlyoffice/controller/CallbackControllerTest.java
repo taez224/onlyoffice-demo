@@ -10,15 +10,14 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.assertj.MockMvcTester;
+import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Tests for CallbackController leveraging SDK CallbackService
@@ -28,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class CallbackControllerTest {
 
     @Autowired
-    private MockMvc mockMvc;
+    private MockMvcTester mvc;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -60,14 +59,17 @@ class CallbackControllerTest {
             when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
                     .thenReturn(callback);
 
-            // when & then
-            mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileKey", FILE_KEY)
-                            .header("Authorization", JWT_TOKEN)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(callbackJson))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.error").value(0));
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", JWT_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(0);
 
             verify(settingsManager).getSecurityHeader();
             verify(callbackService).verifyCallback(any(Callback.class), eq(JWT_TOKEN));
@@ -87,14 +89,17 @@ class CallbackControllerTest {
             doThrow(new IllegalArgumentException("Download URL is required"))
                     .when(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
 
-            // when & then
-            mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileKey", FILE_KEY)
-                            .header("Authorization", JWT_TOKEN)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(callbackJson))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.error").value(1));
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", JWT_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(1);
 
             verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
@@ -116,14 +121,17 @@ class CallbackControllerTest {
             when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
                     .thenReturn(callback);
 
-            // when & then
-            mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileKey", FILE_KEY)
-                            .header("Authorization", JWT_TOKEN)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(callbackJson))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.error").value(0));
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", JWT_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(0);
 
             verify(callbackService).verifyCallback(any(Callback.class), eq(JWT_TOKEN));
             verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
@@ -145,14 +153,17 @@ class CallbackControllerTest {
             when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
                     .thenReturn(callback);
 
-            // when & then
-            mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileKey", FILE_KEY)
-                            .header("Authorization", JWT_TOKEN)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(callbackJson))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.error").value(0));
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", JWT_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(0);
 
             verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
@@ -173,14 +184,17 @@ class CallbackControllerTest {
             when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
                     .thenReturn(callback);
 
-            // when & then
-            mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileKey", FILE_KEY)
-                            .header("Authorization", JWT_TOKEN)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(callbackJson))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.error").value(0));
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", JWT_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(0);
 
             verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
@@ -201,14 +215,17 @@ class CallbackControllerTest {
             when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
                     .thenReturn(callback);
 
-            // when & then
-            mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileKey", FILE_KEY)
-                            .header("Authorization", JWT_TOKEN)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(callbackJson))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.error").value(0));
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", JWT_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(0);
 
             verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
@@ -224,14 +241,17 @@ class CallbackControllerTest {
             when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
                     .thenReturn(callback);
 
-            // when & then
-            mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileKey", FILE_KEY)
-                            .header("Authorization", JWT_TOKEN)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(callbackJson))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.error").value(0));
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", JWT_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(0);
 
             verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }
@@ -252,14 +272,17 @@ class CallbackControllerTest {
             when(callbackService.verifyCallback(any(Callback.class), eq("Bearer invalid.token")))
                     .thenThrow(new RuntimeException("Invalid JWT"));
 
-            // when & then
-            mockMvc.perform(post(CALLBACK_URL)
-                            .param("fileKey", FILE_KEY)
-                            .header("Authorization", "Bearer invalid.token")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(callbackJson))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.error").value(1));
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", "Bearer invalid.token")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(1);
 
             verify(callbackService).verifyCallback(any(Callback.class), eq("Bearer invalid.token"));
             verify(callbackService, never()).processCallback(any(Callback.class), anyString());
