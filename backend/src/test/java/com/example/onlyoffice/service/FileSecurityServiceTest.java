@@ -150,6 +150,29 @@ class FileSecurityServiceTest {
                     .isInstanceOf(SecurityValidationException.class)
                     .hasMessageContaining("파일 형식 불일치");
         }
+
+        @Test
+        @DisplayName("EXE 파일을 DOCX로 위장 시도 시 예외 발생 (매직 바이트 검증)")
+        void shouldRejectExeDisguisedAsDocx() {
+            // given: Windows 실행 파일 매직 바이트 (MZ header)
+            byte[] exeMagicBytes = new byte[] {
+                    0x4D, 0x5A,  // "MZ" - DOS executable signature
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+            };
+
+            MockMultipartFile file = new MockMultipartFile(
+                    "file",
+                    "malware.docx",  // .docx 확장자로 위장
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    exeMagicBytes
+            );
+
+            // when & then: 매직 바이트 검증에서 거부
+            assertThatThrownBy(() -> fileSecurityService.validateFile(file))
+                    .isInstanceOf(SecurityValidationException.class)
+                    .hasMessageContaining("파일 형식 불일치");
+        }
     }
 
     @Nested
@@ -364,11 +387,36 @@ class FileSecurityServiceTest {
 
         @Test
         @DisplayName("엔트리 수가 1000개를 초과하면 예외 발생")
-        void shouldThrowExceptionForTooManyEntries() {
-            // given: 많은 엔트리를 가진 ZIP 파일 생성은 복잡하므로
-            // 실제 환경에서는 통합 테스트로 검증
-            // 여기서는 로직 존재 여부만 확인
-            assertThat(fileSecurityService).isNotNull();
+        void shouldThrowExceptionForTooManyEntries() throws Exception {
+            // given: 1001개의 엔트리를 가진 ZIP 파일 생성
+            byte[] zipContent = createZipFileWithManyEntries(1001);
+            MockMultipartFile file = new MockMultipartFile(
+                    "file",
+                    "zipbomb.docx",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    zipContent
+            );
+
+            // when & then: 엔트리 수 초과로 거부
+            assertThatThrownBy(() -> fileSecurityService.validateFile(file))
+                    .isInstanceOf(SecurityValidationException.class)
+                    .hasMessageContaining("ZIP 파일의 엔트리 수가 너무 많습니다");
+        }
+
+        @Test
+        @DisplayName("엔트리 수가 1000개 이하면 통과")
+        void shouldPassForZipWithMaxAllowedEntries() throws Exception {
+            // given: 정확히 1000개의 엔트리를 가진 ZIP 파일
+            byte[] zipContent = createZipFileWithManyEntries(1000);
+            MockMultipartFile file = new MockMultipartFile(
+                    "file",
+                    "large.docx",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    zipContent
+            );
+
+            // when & then: 예외 없이 통과
+            fileSecurityService.validateFile(file);
         }
     }
 
@@ -385,6 +433,25 @@ class FileSecurityServiceTest {
             zos.putNextEntry(entry);
             zos.write("<?xml version=\"1.0\"?>".getBytes());
             zos.closeEntry();
+        }
+
+        return baos.toByteArray();
+    }
+
+    /**
+     * 지정된 개수의 엔트리를 가진 ZIP 파일 생성
+     * (압축 폭탄 테스트용)
+     */
+    private byte[] createZipFileWithManyEntries(int entryCount) throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+            for (int i = 0; i < entryCount; i++) {
+                ZipEntry entry = new ZipEntry("entry_" + i + ".xml");
+                zos.putNextEntry(entry);
+                zos.write("<data/>".getBytes());
+                zos.closeEntry();
+            }
         }
 
         return baos.toByteArray();

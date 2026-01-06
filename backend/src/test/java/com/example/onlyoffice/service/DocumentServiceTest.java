@@ -42,13 +42,16 @@ class DocumentServiceTest {
     private MinioStorageService storageService;
 
     @Mock
+    private UrlDownloadService urlDownloadService;
+
+    @Mock
     private MultipartFile multipartFile;
 
     private DocumentService documentService;
 
     @BeforeEach
     void setUp() {
-        documentService = new DocumentService(documentRepository, fileSecurityService, storageService);
+        documentService = new DocumentService(documentRepository, fileSecurityService, storageService, urlDownloadService);
     }
 
     @Test
@@ -195,6 +198,214 @@ class DocumentServiceTest {
         Sort sort = sortCaptor.getValue();
         assertThat(sort.getOrderFor("createdAt")).isNotNull();
         assertThat(sort.getOrderFor("createdAt").getDirection()).isEqualTo(Sort.Direction.DESC);
+    }
+
+    @Test
+    @DisplayName("findByFileKey - 존재하는 문서 조회 성공")
+    void findByFileKey_returnsDocumentWhenExists() {
+        Document document = buildDocument();
+        when(documentRepository.findByFileKeyAndDeletedAtIsNull("file-key"))
+                .thenReturn(Optional.of(document));
+
+        Optional<Document> result = documentService.findByFileKey("file-key");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getFileKey()).isEqualTo("file-key");
+    }
+
+    @Test
+    @DisplayName("findByFileKey - 존재하지 않는 문서 조회 시 빈 Optional 반환")
+    void findByFileKey_returnsEmptyWhenNotExists() {
+        when(documentRepository.findByFileKeyAndDeletedAtIsNull("non-existent"))
+                .thenReturn(Optional.empty());
+
+        Optional<Document> result = documentService.findByFileKey("non-existent");
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getEditorKeyByFileKey - 에디터 키 생성 성공")
+    void getEditorKeyByFileKey_returnsEditorKey() {
+        Document document = buildDocument();
+        document.setEditorVersion(3);
+        when(documentRepository.findByFileKeyAndDeletedAtIsNull("file-key"))
+                .thenReturn(Optional.of(document));
+
+        String editorKey = documentService.getEditorKeyByFileKey("file-key");
+
+        assertThat(editorKey).isEqualTo("file-key_v3");
+    }
+
+    @Test
+    @DisplayName("이미 삭제된 문서 삭제 시도 시 조기 반환 (멱등성)")
+    void deleteDocument_returnsEarlyWhenAlreadyDeleted() {
+        Document document = buildDocument();
+        document.setStatus(DocumentStatus.DELETED);
+        document.setDeletedAt(LocalDateTime.now());
+        when(documentRepository.findWithLockById(document.getId()))
+                .thenReturn(Optional.of(document));
+
+        documentService.deleteDocument(document.getId());
+
+        verify(storageService, never()).deleteFile(anyString());
+        verify(documentRepository, never()).save(any(Document.class));
+    }
+
+    @Test
+    @DisplayName("빈 파일 업로드 시 예외 발생")
+    void uploadDocument_throwsExceptionForEmptyFile() {
+        when(multipartFile.isEmpty()).thenReturn(true);
+
+        assertThatThrownBy(() -> documentService.uploadDocument(multipartFile))
+                .isInstanceOf(DocumentUploadException.class)
+                .hasMessageContaining("File is empty");
+    }
+
+    @Test
+    @DisplayName("null 파일 업로드 시 예외 발생")
+    void uploadDocument_throwsExceptionForNullFile() {
+        assertThatThrownBy(() -> documentService.uploadDocument(null))
+                .isInstanceOf(DocumentUploadException.class)
+                .hasMessageContaining("File is empty");
+    }
+
+    @Test
+    @DisplayName("파일명이 없는 파일 업로드 시 기본 파일명 사용")
+    void uploadDocument_usesDefaultFilenameWhenOriginalIsNull() {
+        when(multipartFile.isEmpty()).thenReturn(false);
+        when(multipartFile.getOriginalFilename()).thenReturn(null);
+        when(multipartFile.getSize()).thenReturn(1_024L);
+        when(fileSecurityService.sanitizeFilename("document")).thenReturn("document");
+        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> {
+            Document doc = invocation.getArgument(0);
+            if (doc.getId() == null) {
+                doc.setId(1L);
+            }
+            return doc;
+        });
+
+        Document result = documentService.uploadDocument(multipartFile);
+
+        assertThat(result.getFileName()).isEqualTo("document");
+    }
+
+    @Test
+    @DisplayName("uploadDocument(MultipartFile) - createdBy null로 위임")
+    void uploadDocument_withoutCreatedBy_delegatesToOverload() {
+        when(multipartFile.isEmpty()).thenReturn(false);
+        when(multipartFile.getOriginalFilename()).thenReturn("test.docx");
+        when(multipartFile.getSize()).thenReturn(1_024L);
+        when(fileSecurityService.sanitizeFilename("test.docx")).thenReturn("test.docx");
+        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> {
+            Document doc = invocation.getArgument(0);
+            if (doc.getId() == null) {
+                doc.setId(1L);
+            }
+            return doc;
+        });
+
+        Document result = documentService.uploadDocument(multipartFile);
+
+        assertThat(result.getCreatedBy()).isEqualTo("anonymous");
+    }
+
+    @Test
+    @DisplayName("processCallbackSave - 성공 시 버전을 증가시킨다")
+    void processCallbackSave_incrementsVersionOnSuccess() {
+        // given
+        Document document = buildDocument();
+        document.setEditorVersion(1);
+        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+                .thenReturn(Optional.of(document));
+        when(urlDownloadService.downloadAndSave(anyString(), anyString()))
+                .thenReturn(new UrlDownloadService.DownloadResult(2048L));
+        when(documentRepository.save(document)).thenReturn(document);
+
+        // when
+        documentService.processCallbackSave("http://docs-server/doc.docx", "file-key");
+
+        // then
+        assertThat(document.getEditorVersion()).isEqualTo(2);
+        assertThat(document.getFileSize()).isEqualTo(2048L);
+        verify(documentRepository, times(2)).save(document); // saveDocumentFromUrl + incrementVersion
+    }
+
+    @Test
+    @DisplayName("processCallbackForceSave - 성공 시 버전을 유지한다")
+    void processCallbackForceSave_keepsVersionOnSuccess() {
+        // given
+        Document document = buildDocument();
+        document.setEditorVersion(3);
+        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+                .thenReturn(Optional.of(document));
+        when(urlDownloadService.downloadAndSave(anyString(), anyString()))
+                .thenReturn(new UrlDownloadService.DownloadResult(4096L));
+        when(documentRepository.save(document)).thenReturn(document);
+
+        // when
+        documentService.processCallbackForceSave("http://docs-server/doc.docx", "file-key");
+
+        // then
+        assertThat(document.getEditorVersion()).isEqualTo(3); // 버전 유지
+        assertThat(document.getFileSize()).isEqualTo(4096L);
+        verify(documentRepository, times(1)).save(document); // saveDocumentFromUrl만
+    }
+
+    @Test
+    @DisplayName("processCallbackSave - URL 다운로드 실패 시 예외 발생")
+    void processCallbackSave_throwsWhenDownloadFails() {
+        Document document = buildDocument();
+        document.setEditorVersion(1);
+        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+                .thenReturn(Optional.of(document));
+        when(urlDownloadService.downloadAndSave(anyString(), anyString()))
+                .thenThrow(new RuntimeException("Download failed"));
+
+        assertThatThrownBy(() -> documentService.processCallbackSave("http://invalid-url/doc.docx", "file-key"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Failed to save document from URL");
+
+        verify(documentRepository).findWithLockByFileKeyAndDeletedAtIsNull("file-key");
+    }
+
+    @Test
+    @DisplayName("processCallbackForceSave - URL 다운로드 실패 시 예외 발생")
+    void processCallbackForceSave_throwsWhenDownloadFails() {
+        Document document = buildDocument();
+        document.setEditorVersion(1);
+        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+                .thenReturn(Optional.of(document));
+        when(urlDownloadService.downloadAndSave(anyString(), anyString()))
+                .thenThrow(new RuntimeException("Download failed"));
+
+        assertThatThrownBy(() -> documentService.processCallbackForceSave("http://invalid-url/doc.docx", "file-key"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Failed to save document from URL");
+
+        verify(documentRepository).findWithLockByFileKeyAndDeletedAtIsNull("file-key");
+    }
+
+    @Test
+    @DisplayName("processCallbackSave - 존재하지 않는 문서 시 예외 발생")
+    void processCallbackSave_throwsWhenDocumentNotFound() {
+        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("non-existent"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> documentService.processCallbackSave("http://url/doc.docx", "non-existent"))
+                .isInstanceOf(com.example.onlyoffice.exception.DocumentNotFoundException.class)
+                .hasMessageContaining("non-existent");
+    }
+
+    @Test
+    @DisplayName("processCallbackForceSave - 존재하지 않는 문서 시 예외 발생")
+    void processCallbackForceSave_throwsWhenDocumentNotFound() {
+        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("non-existent"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> documentService.processCallbackForceSave("http://url/doc.docx", "non-existent"))
+                .isInstanceOf(com.example.onlyoffice.exception.DocumentNotFoundException.class)
+                .hasMessageContaining("non-existent");
     }
 
     private Document buildDocument() {
