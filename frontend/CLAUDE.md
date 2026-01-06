@@ -20,7 +20,7 @@ Next.js rewrites `/api` to `http://localhost:8080` via `next.config.ts`; adjust 
 ## Key Files
 - `src/app/layout.tsx` - Root layout with QueryClientProvider
 - `src/app/page.tsx` - Document list page (/)
-- `src/app/editor/[id]/page.tsx` - Editor page (/editor/[id])
+- `src/app/editor/[fileKey]/page.tsx` - Editor page (/editor/[fileKey])
 - `src/components/providers/query-provider.tsx` - TanStack Query setup
 - `src/components/ui/` - shadcn/ui components
 - `src/lib/utils.ts` - Utility functions (cn helper)
@@ -28,14 +28,14 @@ Next.js rewrites `/api` to `http://localhost:8080` via `next.config.ts`; adjust 
 ## Data Flow
 1. User opens `http://localhost:3000` to see document list
 2. Document list fetched via TanStack Query from `GET /api/documents`
-3. User clicks document -> navigates to `/editor/[id]`
-4. Editor page fetches config via `GET /api/documents/{id}/config`
+3. User clicks document -> navigates to `/editor/[fileKey]`
+4. Editor page fetches config via `GET /api/documents/{fileKey}/config`
 5. ONLYOFFICE DocumentEditor renders with JWT-signed config
 6. Document Server handles editing and callbacks
 
 ## Routing Structure
 - `/` - Document list with upload, delete functionality
-- `/editor/[id]` - ONLYOFFICE editor for document with given fileKey
+- `/editor/[fileKey]` - ONLYOFFICE editor for document with given fileKey
 
 ## Coding Guidelines
 - Use App Router conventions: `page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`

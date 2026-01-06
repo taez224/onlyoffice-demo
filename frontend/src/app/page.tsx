@@ -13,8 +13,6 @@ import {
 } from '@/components/ui/table';
 import {
   PlusIcon,
-  SearchIcon,
-  FilterIcon,
   MoreHorizontal,
   FileText,
   FileSpreadsheet,
@@ -23,7 +21,6 @@ import {
   File,
   Download,
   Trash2,
-  Share2,
   X,
   Loader2,
 } from 'lucide-react';
@@ -183,12 +180,6 @@ export default function HomePage() {
 
         <div className="flex gap-3">
           <Button
-            variant="outline"
-            className="h-10 border-border bg-background hover:bg-muted rounded-none border"
-          >
-            <FilterIcon size={16} className="mr-2" /> Filter
-          </Button>
-          <Button
             className="tech-btn h-10 rounded-none"
             onClick={handleUploadClick}
             disabled={uploadMutation.isPending}
@@ -203,30 +194,18 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="space-y-6 flex-1 flex flex-col">
-        <div className="relative shrink-0">
-          <SearchIcon
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            size={16}
-          />
-          <input
-            type="text"
-            placeholder="Search by filename or ID..."
-            className="w-full h-12 pl-10 pr-4 bg-background border border-border focus:outline-none focus:border-primary transition-colors text-sm"
-          />
-        </div>
-
-        <div className="tech-border bg-card flex-1 flex flex-col overflow-hidden relative">
+      <div className="flex-1 flex flex-col">
+        <div className="tech-border bg-card flex-1 flex flex-col overflow-x-auto relative">
           {isLoading ? (
             <div className="flex-1 flex items-center justify-center">
               <Loader2 size={32} className="animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="shrink-0">
+            <div className="min-w-max">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-border bg-muted/30">
-                    <TableHead className="w-[40px] text-center border-r border-border align-middle p-0">
+                    <TableHead className="w-[50px] min-w-[50px] text-center border-r border-border align-middle p-0">
                       <div className="flex items-center justify-center w-full h-full">
                         <input
                           type="checkbox"
@@ -239,7 +218,10 @@ export default function HomePage() {
                     <TableHead className="w-[50px] text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
                       ID
                     </TableHead>
-                    <TableHead className="w-[40%] text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
+                    <TableHead className="w-[120px] text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
+                      FileKey
+                    </TableHead>
+                    <TableHead className="w-[35%] text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
                       Name
                     </TableHead>
                     <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
@@ -267,7 +249,7 @@ export default function HomePage() {
                         onClick={() => toggleSelection(doc.fileKey)}
                       >
                         <TableCell
-                          className="text-center border-r border-border p-0"
+                          className="w-[50px] min-w-[50px] text-center border-r border-border p-0"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <div
@@ -278,16 +260,16 @@ export default function HomePage() {
                               type="checkbox"
                               className="accent-primary w-4 h-4 cursor-pointer"
                               checked={selectedIds.includes(doc.fileKey)}
-                              onChange={() => {}}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleSelection(doc.fileKey);
-                              }}
+                              onChange={() => toggleSelection(doc.fileKey)}
+                              onClick={(e) => e.stopPropagation()}
                             />
                           </div>
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground border-r border-border font-mono text-xs">
                           {doc.id}
+                        </TableCell>
+                        <TableCell className="text-center text-muted-foreground border-r border-border font-mono text-xs">
+                          <span title={doc.fileKey}>{doc.fileKey.slice(0, 8)}...</span>
                         </TableCell>
                         <TableCell className="font-medium text-foreground border-r border-border pl-4">
                           <div className="flex items-center gap-3">
@@ -357,19 +339,11 @@ export default function HomePage() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-background hover:bg-background/20 hover:text-background rounded-none text-xs font-medium px-3"
+              className="h-8 text-background hover:bg-background/20 hover:text-background rounded-none text-xs font-medium px-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled
             >
               <Download size={14} className="mr-2" />
               Download
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-background hover:bg-background/20 hover:text-background rounded-none text-xs font-medium px-3"
-            >
-              <Share2 size={14} className="mr-2" />
-              Share
             </Button>
 
             <div className="w-px h-4 bg-background/20 mx-1"></div>

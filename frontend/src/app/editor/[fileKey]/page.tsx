@@ -130,7 +130,7 @@ function EditorFooter({ currentTime }: { currentTime: string }) {
 export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
-  const fileKey = params.id as string;
+  const fileKey = params.fileKey as string;
   const isValidFileKey = UUID_REGEX.test(fileKey);
 
   const [sessionTimestamp] = useState(() => Date.now());
