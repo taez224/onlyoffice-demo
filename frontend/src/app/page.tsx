@@ -2,6 +2,15 @@
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+  type Row,
+} from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -11,6 +20,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   PlusIcon,
   MoreHorizontal,
@@ -23,6 +42,9 @@ import {
   Trash2,
   X,
   Loader2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDocuments } from '@/hooks/use-documents';
@@ -32,6 +54,24 @@ import type { DocumentResponse } from '@/types/document';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_EXTENSIONS = ['docx', 'xlsx', 'pptx', 'pdf'];
+
+const HEADER_STYLES: Record<string, string> = {
+  select: 'w-[50px] min-w-[50px] p-0',
+  id: 'w-[50px]',
+  fileKey: 'w-[120px]',
+  fileName: 'w-[35%] text-left pl-4',
+};
+
+const CELL_STYLES: Record<string, string> = {
+  select: 'w-[50px] min-w-[50px] text-center p-0',
+  id: 'text-center text-muted-foreground font-mono text-xs',
+  fileKey: 'text-center text-muted-foreground font-mono text-xs',
+  fileName: 'font-medium text-foreground pl-4',
+  fileSize: 'text-center text-muted-foreground font-mono text-xs select-none',
+  createdAt: 'text-center text-muted-foreground font-mono text-xs select-none',
+  updatedAt: 'text-center text-muted-foreground font-mono text-xs select-none',
+  actions: 'text-center',
+};
 
 function validateFile(file: File): string | null {
   if (file.size > MAX_FILE_SIZE) {
@@ -102,13 +142,189 @@ function getTypeBadgeClass(fileType: string) {
   }
 }
 
+function SortableHeader({
+  column,
+  children,
+}: {
+  column: { getIsSorted: () => false | 'asc' | 'desc'; toggleSorting: (desc?: boolean) => void };
+  children: React.ReactNode;
+}) {
+  const sorted = column.getIsSorted();
+  return (
+    <button
+      className="flex items-center gap-1 hover:text-foreground transition-colors"
+      onClick={() => column.toggleSorting(sorted === 'asc')}
+    >
+      {children}
+      {sorted === 'asc' ? (
+        <ArrowUp size={14} />
+      ) : sorted === 'desc' ? (
+        <ArrowDown size={14} />
+      ) : (
+        <ArrowUpDown size={14} className="opacity-50" />
+      )}
+    </button>
+  );
+}
+
+function SelectCheckbox({
+  row,
+  selectedIds,
+  onToggle,
+}: {
+  row: Row<DocumentResponse>;
+  selectedIds: string[];
+  onToggle: (fileKey: string) => void;
+}) {
+  return (
+    <div
+      className="flex items-center justify-center h-full w-full py-3"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(row.original.fileKey);
+      }}
+    >
+      <input
+        type="checkbox"
+        className="accent-primary w-4 h-4 cursor-pointer"
+        checked={selectedIds.includes(row.original.fileKey)}
+        onChange={() => onToggle(row.original.fileKey)}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
+function SelectAllCheckbox({
+  documents,
+  selectedIds,
+  onToggleAll,
+}: {
+  documents: DocumentResponse[];
+  selectedIds: string[];
+  onToggleAll: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-center w-full h-full">
+      <input
+        type="checkbox"
+        className="accent-primary w-4 h-4 cursor-pointer"
+        checked={selectedIds.length === documents.length && documents.length > 0}
+        onChange={onToggleAll}
+      />
+    </div>
+  );
+}
+
+const columns: ColumnDef<DocumentResponse>[] = [
+  {
+    id: 'select',
+    header: () => null,
+    cell: () => null,
+    enableSorting: false,
+  },
+  {
+    accessorKey: 'id',
+    header: 'ID',
+    cell: ({ row }) => row.original.id,
+    enableSorting: false,
+  },
+  {
+    accessorKey: 'fileKey',
+    header: 'FileKey',
+    cell: ({ row }) => (
+      <span title={row.original.fileKey}>{row.original.fileKey.slice(0, 8)}...</span>
+    ),
+    enableSorting: false,
+  },
+  {
+    accessorKey: 'fileName',
+    header: ({ column }) => <SortableHeader column={column}>Name</SortableHeader>,
+    cell: ({ row }) => (
+      <div className="flex items-center gap-3">
+        <Link
+          href={`/editor/${row.original.fileKey}`}
+          onClick={(e) => e.stopPropagation()}
+          className={`w-8 h-8 flex items-center justify-center rounded-full ${getTypeBadgeClass(
+            row.original.fileType
+          )} shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:shadow-sm`}
+        >
+          {getFileIcon(row.original.fileType)}
+        </Link>
+        <Link
+          href={`/editor/${row.original.fileKey}`}
+          onClick={(e) => e.stopPropagation()}
+          className="transition-transform duration-300 group-hover:translate-x-1 truncate select-none hover:underline underline-offset-4 decoration-primary/30"
+        >
+          {row.original.fileName}
+        </Link>
+      </div>
+    ),
+  },
+  {
+    accessorKey: 'fileSize',
+    header: ({ column }) => <SortableHeader column={column}>Size</SortableHeader>,
+    cell: ({ row }) => formatFileSize(row.original.fileSize),
+  },
+  {
+    accessorKey: 'createdAt',
+    header: ({ column }) => <SortableHeader column={column}>Created</SortableHeader>,
+    cell: ({ row }) => formatDateTime(row.original.createdAt),
+  },
+  {
+    accessorKey: 'updatedAt',
+    header: ({ column }) => <SortableHeader column={column}>Modified</SortableHeader>,
+    cell: ({ row }) => formatDateTime(row.original.updatedAt),
+  },
+  {
+    id: 'actions',
+    header: 'Action',
+    cell: () => (
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 hover:bg-background rounded-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <MoreHorizontal size={16} className="text-muted-foreground" />
+      </Button>
+    ),
+    enableSorting: false,
+  },
+];
+
 export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: documents = [], isLoading, error } = useDocuments();
   const uploadMutation = useUploadDocument();
   const deleteDocumentsMutation = useDeleteDocuments();
+
+  const table = useReactTable({
+    data: documents,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const toggleSelection = (fileKey: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(fileKey) ? prev.filter((id) => id !== fileKey) : [...prev, fileKey]
+    );
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.length === documents.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(documents.map((d) => d.fileKey));
+    }
+  };
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -129,24 +345,15 @@ export default function HomePage() {
     e.target.value = '';
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteClick = () => {
     if (selectedIds.length === 0) return;
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
     deleteDocumentsMutation.mutate(selectedIds);
     setSelectedIds([]);
-  };
-
-  const toggleSelection = (fileKey: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(fileKey) ? prev.filter((id) => id !== fileKey) : [...prev, fileKey]
-    );
-  };
-
-  const toggleAll = () => {
-    if (selectedIds.length === documents.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(documents.map((d) => d.fileKey));
-    }
+    setDeleteDialogOpen(false);
   };
 
   if (error) {
@@ -204,112 +411,75 @@ export default function HomePage() {
             <div className="min-w-max">
               <Table>
                 <TableHeader>
-                  <TableRow className="hover:bg-transparent border-border bg-muted/30">
-                    <TableHead className="w-[50px] min-w-[50px] text-center border-r border-border align-middle p-0">
-                      <div className="flex items-center justify-center w-full h-full">
-                        <input
-                          type="checkbox"
-                          className="accent-primary w-4 h-4 cursor-pointer"
-                          checked={selectedIds.length === documents.length && documents.length > 0}
-                          onChange={toggleAll}
-                        />
-                      </div>
-                    </TableHead>
-                    <TableHead className="w-[50px] text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
-                      ID
-                    </TableHead>
-                    <TableHead className="w-[120px] text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
-                      FileKey
-                    </TableHead>
-                    <TableHead className="w-[35%] text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
-                      Name
-                    </TableHead>
-                    <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
-                      Size
-                    </TableHead>
-                    <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
-                      Created
-                    </TableHead>
-                    <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center border-r border-border align-middle">
-                      Modified
-                    </TableHead>
-                    <TableHead className="w-[80px] text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center align-middle">
-                      Action
-                    </TableHead>
-                  </TableRow>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow
+                      key={headerGroup.id}
+                      className="hover:bg-transparent border-border bg-muted/30"
+                    >
+                      {headerGroup.headers.map((header, idx) => {
+                        const isLast = idx === headerGroup.headers.length - 1;
+                        const baseStyle =
+                          'text-xs font-bold uppercase tracking-wider text-muted-foreground h-10 text-center align-middle';
+                        const columnStyle = HEADER_STYLES[header.id] ?? '';
+                        const borderStyle = isLast ? '' : 'border-r border-border';
+
+                        return (
+                          <TableHead
+                            key={header.id}
+                            className={`${baseStyle} ${columnStyle} ${borderStyle}`}
+                          >
+                            {header.id === 'select' ? (
+                              <SelectAllCheckbox
+                                documents={documents}
+                                selectedIds={selectedIds}
+                                onToggleAll={toggleAll}
+                              />
+                            ) : header.isPlaceholder ? null : (
+                              flexRender(header.column.columnDef.header, header.getContext())
+                            )}
+                          </TableHead>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
                 </TableHeader>
-                {documents.length > 0 && (
+                {table.getRowModel().rows.length > 0 && (
                   <TableBody>
-                    {documents.map((doc: DocumentResponse) => (
+                    {table.getRowModel().rows.map((row) => (
                       <TableRow
-                        key={doc.fileKey}
+                        key={row.id}
                         className={`border-border hover:bg-muted/50 transition-colors cursor-pointer group h-14 ${
-                          selectedIds.includes(doc.fileKey) ? 'bg-muted/40' : ''
+                          selectedIds.includes(row.original.fileKey) ? 'bg-muted/40' : ''
                         }`}
-                        onClick={() => toggleSelection(doc.fileKey)}
+                        onClick={() => toggleSelection(row.original.fileKey)}
                       >
-                        <TableCell
-                          className="w-[50px] min-w-[50px] text-center border-r border-border p-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div
-                            className="flex items-center justify-center h-full w-full py-3"
-                            onClick={() => toggleSelection(doc.fileKey)}
-                          >
-                            <input
-                              type="checkbox"
-                              className="accent-primary w-4 h-4 cursor-pointer"
-                              checked={selectedIds.includes(doc.fileKey)}
-                              onChange={() => toggleSelection(doc.fileKey)}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground border-r border-border font-mono text-xs">
-                          {doc.id}
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground border-r border-border font-mono text-xs">
-                          <span title={doc.fileKey}>{doc.fileKey.slice(0, 8)}...</span>
-                        </TableCell>
-                        <TableCell className="font-medium text-foreground border-r border-border pl-4">
-                          <div className="flex items-center gap-3">
-                            <Link
-                              href={`/editor/${doc.fileKey}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className={`w-8 h-8 flex items-center justify-center rounded-full ${getTypeBadgeClass(
-                                doc.fileType
-                              )} shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:shadow-sm`}
+                        {row.getVisibleCells().map((cell, idx) => {
+                          const isLast = idx === row.getVisibleCells().length - 1;
+                          const columnStyle = CELL_STYLES[cell.column.id] ?? '';
+                          const borderStyle = isLast ? '' : 'border-r border-border';
+
+                          return (
+                            <TableCell
+                              key={cell.id}
+                              className={`${columnStyle} ${borderStyle}`}
+                              onClick={
+                                cell.column.id === 'select'
+                                  ? (e) => e.stopPropagation()
+                                  : undefined
+                              }
                             >
-                              {getFileIcon(doc.fileType)}
-                            </Link>
-                            <Link
-                              href={`/editor/${doc.fileKey}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="transition-transform duration-300 group-hover:translate-x-1 truncate select-none hover:underline underline-offset-4 decoration-primary/30"
-                            >
-                              {doc.fileName}
-                            </Link>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground border-r border-border font-mono text-xs select-none">
-                          {formatFileSize(doc.fileSize)}
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground border-r border-border font-mono text-xs select-none">
-                          {formatDateTime(doc.createdAt)}
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground border-r border-border font-mono text-xs select-none">
-                          {formatDateTime(doc.updatedAt)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-background rounded-none"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <MoreHorizontal size={16} className="text-muted-foreground" />
-                          </Button>
-                        </TableCell>
+                              {cell.column.id === 'select' ? (
+                                <SelectCheckbox
+                                  row={row}
+                                  selectedIds={selectedIds}
+                                  onToggle={toggleSelection}
+                                />
+                              ) : (
+                                flexRender(cell.column.columnDef.cell, cell.getContext())
+                              )}
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -352,7 +522,7 @@ export default function HomePage() {
               variant="ghost"
               size="sm"
               className="h-8 text-red-400 hover:bg-red-400/20 hover:text-red-300 rounded-none text-xs font-medium px-3"
-              onClick={handleDeleteSelected}
+              onClick={handleDeleteClick}
               disabled={deleteDocumentsMutation.isPending}
             >
               <Trash2 size={14} className="mr-2" />
@@ -370,6 +540,26 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="rounded-none">
+          <AlertDialogHeader>
+            <AlertDialogTitle>문서 삭제</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedIds.length}개의 문서를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-none">취소</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-none bg-red-600 hover:bg-red-700"
+              onClick={handleDeleteConfirm}
+            >
+              삭제
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
