@@ -27,10 +27,27 @@ import {
   X,
   Loader2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useDocuments } from '@/hooks/use-documents';
 import { useUploadDocument } from '@/hooks/use-upload-document';
 import { useDeleteDocuments } from '@/hooks/use-delete-documents';
 import type { DocumentResponse } from '@/types/document';
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const ALLOWED_EXTENSIONS = ['docx', 'xlsx', 'pptx', 'pdf'];
+
+function validateFile(file: File): string | null {
+  if (file.size > MAX_FILE_SIZE) {
+    return `파일 크기가 100MB를 초과합니다 (현재: ${formatFileSize(file.size)})`;
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (!extension || !ALLOWED_EXTENSIONS.includes(extension)) {
+    return `허용되지 않은 파일 형식입니다. 허용: ${ALLOWED_EXTENSIONS.join(', ')}`;
+  }
+
+  return null;
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -102,10 +119,17 @@ export default function HomePage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      uploadMutation.mutate(file);
+    if (!file) return;
+
+    const validationError = validateFile(file);
+    if (validationError) {
+      toast.error(validationError);
       e.target.value = '';
+      return;
     }
+
+    uploadMutation.mutate(file);
+    e.target.value = '';
   };
 
   const handleDeleteSelected = () => {
@@ -145,7 +169,7 @@ export default function HomePage() {
         ref={fileInputRef}
         type="file"
         className="hidden"
-        accept=".docx,.xlsx,.pptx,.pdf,.doc,.xls,.ppt"
+        accept=".docx,.xlsx,.pptx,.pdf"
         onChange={handleFileChange}
       />
 

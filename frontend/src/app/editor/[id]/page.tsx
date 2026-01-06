@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { DocumentEditor } from '@onlyoffice/document-editor-react';
 import {
   ArrowLeft,
-  Download,
   Loader2,
   FileText,
   FileSpreadsheet,
@@ -192,16 +191,6 @@ export default function EditorPage() {
               </span>
             </div>
           </div>
-        </div>
-        <div className="flex items-center h-full px-4 gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 rounded-none border-border hover:bg-muted gap-2 text-xs font-medium hidden md:flex"
-          >
-            <Download size={14} />
-            Export
-          </Button>
         </div>
       </header>
 

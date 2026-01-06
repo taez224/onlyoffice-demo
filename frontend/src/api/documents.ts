@@ -28,8 +28,28 @@ export async function deleteDocument(fileKey: string): Promise<void> {
   await apiClient.delete(`/documents/${fileKey}`);
 }
 
-export async function deleteDocuments(fileKeys: string[]): Promise<void> {
-  await Promise.all(fileKeys.map((fileKey) => apiClient.delete(`/documents/${fileKey}`)));
+export interface DeleteResult {
+  succeeded: string[];
+  failed: string[];
+}
+
+export async function deleteDocuments(fileKeys: string[]): Promise<DeleteResult> {
+  const results = await Promise.allSettled(
+    fileKeys.map((fileKey) => apiClient.delete(`/documents/${fileKey}`).then(() => fileKey))
+  );
+
+  const succeeded: string[] = [];
+  const failed: string[] = [];
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      succeeded.push(result.value);
+    } else {
+      failed.push(fileKeys[index]);
+    }
+  });
+
+  return { succeeded, failed };
 }
 
 export async function getEditorConfig(fileKey: string): Promise<EditorConfigResponse> {

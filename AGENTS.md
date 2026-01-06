@@ -1,7 +1,8 @@
 # Claude Code Review Guide
 
 ## Project Snapshot
-- Spring Boot 3.5.8 (Java 21) backend + React 18/Vite frontend embedding ONLYOFFICE Document Server 9.1 via the Java SDK 1.7.0.
+- Spring Boot 3.5.8 (Java 21) backend + Next.js 16/React 19 frontend embedding ONLYOFFICE Document Server 9.1 via the Java SDK 1.7.0.
+- Frontend uses App Router, TanStack Query for server state, shadcn/ui + Tailwind CSS for styling.
 - Storage is filesystem-based (`storage/`) and mounted for the Document Server container; docker-compose also provisions PostgreSQL + MinIO for future persistence.
 - JWT auth is enforced between backend and Document Server; `.env` defines shared secrets and infra credentials.
 - **Documents identified by UUID fileKey** (not fileName); see [Issue #30](https://github.com/taez224/onlyoffice-demo/issues/30) for migration details.
@@ -16,10 +17,11 @@ Documents use **UUID-based fileKey** as the primary identifier:
 **Benefits**: Unpredictable identifiers (better security), support for duplicate filenames, and scalability. **Migration**: Run `POST /api/admin/migration/files` to generate UUIDs for legacy files in `storage/`.
 
 ## Architecture & Flow
-1. Frontend requests `GET /api/config?fileKey=550e8400-e29b-41d4-a716-446655440000` (UUID).
-2. Backend creates config via SDK `ConfigService`, signs it through `JwtManager`, and returns URLs pointing to `host.docker.internal:8080`.
-3. Document Server downloads `/files/{fileKey}`, users edit collaboratively, and callbacks hit `/callback?fileKey={uuid}`.
-4. Backend downloads the edited asset from the callback payload and overwrites `storage/{fileName}` while incrementing `editorVersion`.
+1. Frontend lists documents via `GET /api/documents`, user clicks to open `/editor/{fileKey}`.
+2. Editor page fetches config via `GET /api/documents/{fileKey}/config`.
+3. Backend creates config via SDK `ConfigService`, signs it through `JwtManager`, and returns URLs pointing to `host.docker.internal:8080`.
+4. Document Server downloads `/files/{fileKey}`, users edit collaboratively, and callbacks hit `/callback?fileKey={uuid}`.
+5. Backend downloads the edited asset from the callback payload and overwrites `storage/{fileName}` while incrementing `editorVersion`.
 Ensure callback URLs remain reachable from inside Docker; regressions here block saving.
 
 ## Build & Test Commands
@@ -44,11 +46,12 @@ pnpm lint
 For smoke testing:
 1. Upload a file via the backend (or migrate existing files: `POST /api/admin/migration/files`)
 2. Note the returned `fileKey` (UUID)
-3. Call `http://localhost:5173?fileKey={fileKey}` to open the editor
+3. Call `http://localhost:3000?fileKey={fileKey}` to open the editor
 
 ## Coding & Design Conventions
 - Java uses layered `controller/service/sdk/util` packages, Lombok, four-space indent, PascalCase classes, camelCase methods, `/api/*` routes, and `KeyUtils` for sanitized doc keys.
 - TypeScript uses two-space indent, PascalCase component files, hooks-first ordering, and ESLint+tsc enforcement.
+- Frontend uses App Router conventions (`page.tsx`, `layout.tsx`), TanStack Query for data fetching (avoid raw useEffect), and custom hooks for mutations.
 - Favor SDK abstractions (`CustomSettingsManager`, `CustomDocumentManager`, `CustomUrlManager`) over ad-hoc JSON.
 
 ## Review Priorities

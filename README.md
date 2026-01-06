@@ -181,7 +181,7 @@ pnpm install
 pnpm dev
 ```
 
-Frontend가 `http://localhost:5173`에서 실행됩니다.
+Frontend가 `http://localhost:3000`에서 실행됩니다.
 
 ### 6단계: 기존 파일 마이그레이션 (최초 1회)
 
@@ -198,12 +198,12 @@ curl -X POST http://localhost:8080/api/admin/migration/files
 브라우저에서 fileKey를 사용하여 접속합니다:
 
 ```
-http://localhost:5173?fileKey={마이그레이션에서 받은 UUID}
+http://localhost:3000?fileKey={마이그레이션에서 받은 UUID}
 ```
 
 **예제:**
 ```
-http://localhost:5173?fileKey=550e8400-e29b-41d4-a716-446655440000
+http://localhost:3000?fileKey=550e8400-e29b-41d4-a716-446655440000
 ```
 
 **fileKey 확인 방법:**
@@ -236,7 +236,7 @@ sequenceDiagram
     participant ONLYOFFICE as ONLYOFFICE<br/>Document Server
     participant Storage as 파일 저장소<br/>(storage/)
 
-    User->>Browser: http://localhost:5173?fileKey={uuid} 접속
+    User->>Browser: http://localhost:3000?fileKey={uuid} 접속
     Browser->>Backend: GET /api/config?fileKey={uuid}
     Backend->>Storage: fileKey로 파일 존재 확인
     Storage-->>Backend: 파일 정보 반환
