@@ -92,6 +92,16 @@ class DocumentRepositoryTest {
             Document result = documentRepository.findById(deletedDocument.getId()).orElseThrow();
             assertThat(result.getStatus()).isEqualTo(DocumentStatus.ACTIVE);
         }
+
+        @Test
+        @DisplayName("존재하지 않는 ID로 복원 시 0을 반환한다")
+        void restore_withInvalidId_returnsZero() {
+            // when
+            int updatedCount = documentRepository.restore(999999L);
+
+            // then
+            assertThat(updatedCount).isEqualTo(0);
+        }
     }
 
     @Nested
