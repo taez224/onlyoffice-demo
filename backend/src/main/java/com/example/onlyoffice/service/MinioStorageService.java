@@ -8,8 +8,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -86,11 +85,7 @@ public class MinioStorageService {
      * @param objectName  MinIO object key
      * @throws StorageException 재시도 후에도 실패 시
      */
-    @Retryable(
-        retryFor = {Exception.class},
-        maxAttempts = 3,
-        backoff = @Backoff(delay = 1000)
-    )
+    @Retryable(maxRetries = 2, includes = Exception.class, delay = 1000)
     public void uploadStream(InputStream inputStream, long size, String contentType, String objectName) {
         try {
             PutObjectArgs.Builder builder = PutObjectArgs.builder()
@@ -149,11 +144,7 @@ public class MinioStorageService {
      * @param objectName The object key/path in MinIO
      * @throws StorageException 재시도 후에도 실패 시
      */
-    @Retryable(
-        retryFor = {Exception.class},
-        maxAttempts = 3,
-        backoff = @Backoff(delay = 1000)
-    )
+    @Retryable(maxRetries = 2, includes = Exception.class, delay = 1000)
     public void deleteFile(String objectName) {
         try {
             minioClient.removeObject(

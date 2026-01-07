@@ -55,8 +55,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-core'
 
-    // Retry - Spring Framework 7 내장 retry로 전환 권장, BOM에서 제거되어 버전 명시 필요
-    implementation 'org.springframework.retry:spring-retry:2.0.12'
+    // Retry - Spring Framework 7 내장 @Retryable 사용 (spring-retry 불필요)
     implementation 'org.springframework.boot:spring-boot-starter-aspectj'
 
 	compileOnly 'org.projectlombok:lombok'

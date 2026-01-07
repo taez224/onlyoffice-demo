@@ -37,10 +37,8 @@ dependencies {
     // AOP → AspectJ 이름 변경
     implementation 'org.springframework.boot:spring-boot-starter-aspectj'  // 이전: starter-aop
     
-    // Spring Retry - Spring Framework 7에 retry 기능 내장으로 BOM에서 제거됨
-    // 마이그레이션 권장: Spring Framework의 새 retry 기능으로 전환
-    // 참고: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Release-Notes
-    implementation 'org.springframework.retry:spring-retry:2.0.12'
+    // Spring Retry - Spring Framework 7에 내장되어 별도 의존성 불필요
+    // 참고: Section 7. Spring Framework 7 Native Retry 마이그레이션
     
     // 테스트 모듈화된 스타터
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
@@ -190,7 +188,7 @@ void restore() {
 
 | 파일 | 변경 내용 |
 |------|----------|
-| `build.gradle` | Spring Boot 4.0, 의존성 변경 |
+| `build.gradle` | Spring Boot 4.0, 의존성 변경, spring-retry 제거 |
 | `gradle-wrapper.properties` | Gradle 8.14 |
 
 ### 소스 코드
@@ -202,6 +200,8 @@ void restore() {
 | `DocumentService.java` | `delete()` + `restore()` 패턴 적용 |
 | `FileMigrationService.java` | Repository 메서드명 변경 |
 | `CustomUrlManager.java` | `fromHttpUrl()` → `fromUriString()` |
+| `DemoApplication.java` | `@EnableRetry` → `@EnableResilientMethods` |
+| `MinioStorageService.java` | `@Retryable` Spring Framework 7 문법 적용 |
 
 ### 테스트 코드
 
@@ -233,7 +233,80 @@ implementation 'org.springframework.boot:spring-boot-jackson2'
 
 ---
 
-## 7. 마이그레이션 체크리스트
+## 7. Spring Framework 7 Native Retry 마이그레이션
+
+Spring Framework 7에 retry 기능이 내장되어 `spring-retry` 라이브러리 의존성이 Spring Boot BOM에서 제거되었습니다.
+
+### 의존성 변경
+
+```groovy
+// build.gradle - 이전 (제거됨)
+implementation 'org.springframework.retry:spring-retry:2.0.12'
+
+// 이후 - Spring Framework 7에 내장, 별도 의존성 불필요
+```
+
+### 애플리케이션 설정
+
+```java
+// 이전 (spring-retry)
+import org.springframework.retry.annotation.EnableRetry;
+
+@SpringBootApplication
+@EnableRetry
+public class DemoApplication { }
+
+// 이후 (Spring Framework 7)
+import org.springframework.resilience.annotation.EnableResilientMethods;
+
+@SpringBootApplication
+@EnableResilientMethods
+public class DemoApplication { }
+```
+
+### @Retryable 어노테이션 변경
+
+| spring-retry | Spring Framework 7 |
+|--------------|-------------------|
+| `@EnableRetry` | `@EnableResilientMethods` |
+| `retryFor = {Exception.class}` | `includes = Exception.class` |
+| `maxAttempts = 3` (3회 시도) | `maxRetries = 2` (1 + 2 = 3회 시도) |
+| `backoff = @Backoff(delay = 1000)` | `delay = 1000` |
+| `org.springframework.retry.annotation.*` | `org.springframework.resilience.annotation.*` |
+
+**주의**: `maxAttempts`와 `maxRetries`의 차이
+- spring-retry의 `maxAttempts = 3`: 총 3회 시도 (초기 1회 + 재시도 2회)
+- Spring Framework 7의 `maxRetries = 2`: 총 3회 시도 (초기 1회 + 재시도 2회)
+- 동일한 동작을 위해 `maxAttempts - 1 = maxRetries`
+
+### 코드 예시
+
+```java
+// 이전 (spring-retry)
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
+
+@Retryable(
+    retryFor = {Exception.class},
+    maxAttempts = 3,
+    backoff = @Backoff(delay = 1000)
+)
+public void uploadFile(String key, InputStream stream) { }
+
+// 이후 (Spring Framework 7)
+import org.springframework.resilience.annotation.Retryable;
+
+@Retryable(
+    maxRetries = 2,
+    includes = Exception.class,
+    delay = 1000
+)
+public void uploadFile(String key, InputStream stream) { }
+```
+
+---
+
+## 8. 마이그레이션 체크리스트
 
 - [x] Gradle 8.14 업그레이드
 - [x] Spring Boot 4.0.1 업그레이드
@@ -246,14 +319,11 @@ implementation 'org.springframework.boot:spring-boot-jackson2'
 - [x] 테스트 import 경로 변경
 - [x] 전체 테스트 통과 확인
 - [x] 문서화 (AGENTS.md, CLAUDE.md) 업데이트
-
-### 향후 작업 (TODO)
-
-- [ ] **Spring Retry → Spring Framework 7 Retry 전환**: Spring Framework 7에 retry 기능이 내장되어 `spring-retry` 라이브러리 의존성 관리가 Spring Boot BOM에서 제거됨. 점진적으로 Spring Framework의 새 retry API로 마이그레이션 권장.
+- [x] Spring Retry → Spring Framework 7 Native Retry 전환
 
 ---
 
-## 8. 참고 자료
+## 9. 참고 자료
 
 - [Spring Boot 4.0 Release Notes](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Release-Notes)
 - [Hibernate 7 Migration Guide](https://docs.jboss.org/hibernate/orm/7.0/migration-guide/migration-guide.html)
