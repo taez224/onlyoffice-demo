@@ -19,19 +19,27 @@ Next.js rewrites `/api` to `http://localhost:8080` via `next.config.ts`; adjust 
 
 ## Key Files
 - `src/app/layout.tsx` - Root layout with QueryClientProvider
-- `src/app/page.tsx` - Document list page (/)
+- `src/app/page.tsx` - Document list entry (Server Component, renders DocumentsPage)
 - `src/app/editor/[fileKey]/page.tsx` - Editor page (/editor/[fileKey])
+- `src/components/documents/` - Document list components (Streaming SSR)
+  - `documents-page.tsx` - Main client component with Suspense boundary
+  - `document-list.tsx` - Uses `useSuspenseQuery` for streaming data fetch
+  - `document-table.tsx` - TanStack Table with sorting
+  - `table-skeleton.tsx` - Suspense fallback skeleton UI
+  - `documents-error-boundary.tsx` - Error boundary with retry
 - `src/components/providers/query-provider.tsx` - TanStack Query setup
 - `src/components/ui/` - shadcn/ui components
+- `src/hooks/use-documents.ts` - `useDocuments()` and `useDocumentsSuspense()` hooks
 - `src/lib/utils.ts` - Utility functions (cn helper)
 
 ## Data Flow
 1. User opens `http://localhost:3000` to see document list
-2. Document list fetched via TanStack Query from `GET /api/documents`
-3. User clicks document -> navigates to `/editor/[fileKey]`
-4. Editor page fetches config via `GET /api/documents/{fileKey}/config`
-5. ONLYOFFICE DocumentEditor renders with JWT-signed config
-6. Document Server handles editing and callbacks
+2. **Streaming SSR**: Header renders immediately, table shows skeleton
+3. `useSuspenseQuery` fetches `GET /api/documents` on server, streams result
+4. User clicks document -> navigates to `/editor/[fileKey]`
+5. Editor page fetches config via `GET /api/documents/{fileKey}/config`
+6. ONLYOFFICE DocumentEditor renders with JWT-signed config
+7. Document Server handles editing and callbacks
 
 ## Routing Structure
 - `/` - Document list with upload, delete functionality
@@ -40,9 +48,13 @@ Next.js rewrites `/api` to `http://localhost:8080` via `next.config.ts`; adjust 
 ## Coding Guidelines
 - Use App Router conventions: `page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`
 - Client components must have `'use client'` directive at top
-- Server components are default; prefer them for data fetching
+- Server components are default; prefer them for shell/layout
 - ONLYOFFICE editor must be client component (uses browser APIs)
-- Use TanStack Query for all API calls; avoid useEffect for data fetching
+- **Data fetching pattern (Streaming SSR)**:
+  - Use `useSuspenseQuery` inside Suspense boundary for streaming
+  - Wrap with `<Suspense fallback={<Skeleton />}>` for progressive loading
+  - Use `QueryErrorResetBoundary` + `ErrorBoundary` for error handling
+  - Avoid `await prefetchQuery` if you want immediate shell rendering
 - Props interfaces should be explicit TypeScript types
 
 ## Testing Expectations

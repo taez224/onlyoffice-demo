@@ -51,7 +51,7 @@ For smoke testing:
 ## Coding & Design Conventions
 - Java uses layered `controller/service/sdk/util` packages, Lombok, four-space indent, PascalCase classes, camelCase methods, `/api/*` routes, and `KeyUtils` for sanitized doc keys.
 - TypeScript uses two-space indent, PascalCase component files, hooks-first ordering, and ESLint+tsc enforcement.
-- Frontend uses App Router conventions (`page.tsx`, `layout.tsx`), TanStack Query for data fetching (avoid raw useEffect), and custom hooks for mutations.
+- Frontend uses App Router conventions (`page.tsx`, `layout.tsx`), TanStack Query with Streaming SSR (`useSuspenseQuery` + Suspense), and custom hooks for mutations.
 - Favor SDK abstractions (`CustomSettingsManager`, `CustomDocumentManager`, `CustomUrlManager`) over ad-hoc JSON.
 
 ## Review Priorities
