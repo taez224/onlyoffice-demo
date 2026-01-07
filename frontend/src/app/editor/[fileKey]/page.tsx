@@ -19,8 +19,7 @@ import { useEditorConfig } from '@/hooks/use-editor-config';
 import { useDocumentEditor } from '@/hooks/use-document-editor';
 import { useCurrentTime } from '@/hooks/use-current-time';
 import type { DocumentType } from '@/types/document';
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isValidUUID } from '@/lib/validation';
 
 function getDocumentIcon(documentType: DocumentType) {
   const iconProps = { size: 16 };
@@ -131,7 +130,7 @@ export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
   const fileKey = params.fileKey as string;
-  const isValidFileKey = UUID_REGEX.test(fileKey);
+  const isValidFileKey = isValidUUID(fileKey);
 
   const [sessionTimestamp] = useState(() => Date.now());
   const editorId = `editor-${fileKey}-${sessionTimestamp}`;
