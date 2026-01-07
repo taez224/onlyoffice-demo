@@ -1,7 +1,7 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.5.8'
-	id 'io.spring.dependency-management' version '1.1.5'
+	id 'org.springframework.boot' version '4.0.1'
+	id 'io.spring.dependency-management' version '1.1.7'
 	id 'jacoco'
 }
 
@@ -33,11 +33,14 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	runtimeOnly 'org.postgresql:postgresql'
 
-    // JWT
+    // JWT (JJWT still uses Jackson 2.x)
     implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
-    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    
+    // Jackson 2 backward compatibility (Spring Boot 4.0 uses Jackson 3.0 by default)
+    // Required for: JJWT, ONLYOFFICE SDK, and existing code using ObjectMapper
+    implementation 'org.springframework.boot:spring-boot-jackson2'
 
     // File Validation
     implementation 'org.apache.tika:tika-core:3.2.3'
@@ -52,13 +55,14 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-core'
 
-    // Retry
-    implementation 'org.springframework.retry:spring-retry'
-    implementation 'org.springframework.boot:spring-boot-starter-aop'
+    // Retry - Spring Framework 7 내장 @Retryable 사용 (spring-retry 불필요)
+    implementation 'org.springframework.boot:spring-boot-starter-aspectj'
 
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testRuntimeOnly 'com.h2database:h2'
 	testCompileOnly 'org.projectlombok:lombok'

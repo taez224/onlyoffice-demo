@@ -1,8 +1,9 @@
 # Backend – Spring Boot + ONLYOFFICE SDK
 
 ## Purpose & Stack
-- Java 21 + Spring Boot 3.5.8 providing REST APIs at `/api` plus `/files`/`/callback`.
-- Gradle builds the service; Lombok reduces boilerplate; JJWT + ONLYOFFICE Java SDK 1.7.0 handle JWT-secured editor configs.
+- Java 21 + Spring Boot 4.0.1 (Hibernate 7, Spring Framework 7) providing REST APIs at `/api` plus `/files`/`/callback`.
+- Gradle 8.14 builds the service; Lombok reduces boilerplate; JJWT + ONLYOFFICE Java SDK 1.7.0 handle JWT-secured editor configs.
+- Jackson 2 backward compatibility via `spring-boot-jackson2` (required for JJWT and ONLYOFFICE SDK).
 - `storage/` (alongside `build.gradle`) stores working documents; ensure Docker volume permissions allow read/write.
 
 ## Run & Test
@@ -45,6 +46,31 @@ Documents are now identified by **fileKey** (UUID) rather than fileName:
 
 **Migration** (Issue #30): Use `POST /api/admin/migration/files` to scan `storage/` and generate fileKeys for legacy files. All new uploads automatically receive UUIDs.
 
+## Hibernate 7 Soft Delete
+
+The `Document` entity uses Hibernate 7's native `@SoftDelete` annotation:
+
+```java
+@SoftDelete(strategy = SoftDeleteType.TIMESTAMP, columnName = "deleted_at")
+public class Document { ... }
+```
+
+**Key behaviors**:
+- `repository.delete(entity)` automatically sets `deleted_at` timestamp (no manual status update needed)
+- All queries automatically filter out soft-deleted records
+- Use `repository.restore(id)` native query to undelete records
+- Repository methods no longer need `AndDeletedAtIsNull` suffix
+
+**Design decision**: `DocumentStatus` enum has only `PENDING` and `ACTIVE` — no `DELETED` value. The `deleted_at` column is the single source of truth for soft delete. This avoids redundant state management.
+
+**Repository pattern**:
+```java
+findByFileKey(String fileKey)           // automatically excludes deleted
+findWithLockByFileKey(String fileKey)   // with pessimistic lock
+findAllByStatus(DocumentStatus status)  // automatically excludes deleted
+restore(Long id)                        // native query to undelete
+```
+
 ## Callback Concurrency Control
 
 ONLYOFFICE Document Server may issue concurrent callback requests (e.g., SAVE/FORCESAVE) for the same document. To prevent race conditions, we employ a **per-document queue architecture**:
@@ -53,7 +79,7 @@ ONLYOFFICE Document Server may issue concurrent callback requests (e.g., SAVE/FO
   - **Same document**: callbacks queued sequentially on the document's executor, preventing concurrent writes.
   - **Different documents**: callbacks execute in parallel across separate executors for optimal performance.
   
-- **Pessimistic Locking**: `DocumentRepository.findWithLockByFileKeyAndDeletedAtIsNull()` acquires `PESSIMISTIC_WRITE` lock (3s timeout) during `processCallbackSave`/`processCallbackForceSave` to ensure atomic file overwrites and version updates.
+- **Pessimistic Locking**: `DocumentRepository.findWithLockByFileKey()` acquires `PESSIMISTIC_WRITE` lock (3s timeout) during `processCallbackSave`/`processCallbackForceSave` to ensure atomic file overwrites and version updates.
 
 - **Graceful Shutdown**: Service awaits pending tasks for 30 seconds; forces shutdown if timeout exceeded.
 
@@ -63,12 +89,13 @@ ONLYOFFICE Document Server may issue concurrent callback requests (e.g., SAVE/FO
 
 ## Testing Cues
 - Tests live under `src/test/java` mirroring the main packages (`controller`, `sdk`, `service`, `util`). Use descriptive method names (`shouldHandleForceSaveStatus`).
+- Use `@MockitoBean` (not deprecated `@MockBean`) for Spring Boot 4.0 compatibility.
 - `CallbackQueueServiceTest` validates sequential (same-document) and parallel (different-document) callback processing, plus error handling and graceful shutdown.
 - `CustomCallbackServiceTest`, `CustomDocumentManagerTest`, etc., already cover happy paths; extend them when adding logic (e.g., new permission modes or key rules).
 - Mock filesystem interactions via temporary directories; avoid touching real `storage/`.
 
 ## Review Checklist
-1. **FileKey usage** – ensure all endpoints use UUID fileKey (not fileName); verify `DocumentRepository` queries use `findByFileKeyAndDeletedAtIsNull()` for active documents.
+1. **FileKey usage** – ensure all endpoints use UUID fileKey (not fileName); verify `DocumentRepository` queries use `findByFileKey()` for active documents (Hibernate 7 auto-filters deleted).
 2. **Config validity** – `documentUrl`, `callbackUrl`, `editorKey` (fileKey + version), and `jwt` must align with Docker hostnames; ensure `CustomUrlManager` updates stay consistent with controllers.
 3. **Security** – fileKey validation via `KeyUtils.isValidKey()` (UUID format + ONLYOFFICE spec), reject path traversal, never log secrets, and keep `.env`-sourced properties outside version control.
 4. **Callbacks** – `CallbackController` extracts fileKey from query param, distinguishes between `Status.SAVE` (increments editorVersion), `FORCESAVE` (no version increment), errors, and returns `{ "error": 0 }` on success.
