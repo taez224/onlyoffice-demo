@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import type { SortingState } from '@tanstack/react-table';
-import { useDocuments } from '@/hooks/use-documents';
+import { Suspense, useState } from 'react';
+import type { SortingState, OnChangeFn } from '@tanstack/react-table';
 import { useUploadDocument } from '@/hooks/use-upload-document';
 import { useDeleteDocuments } from '@/hooks/use-delete-documents';
-import { DocumentTable } from './document-table';
+import { useDocumentsSuspense } from '@/hooks/use-documents';
+import { DocumentsErrorBoundary } from './documents-error-boundary';
+import { DocumentList } from './document-list';
+import { TableSkeleton } from './table-skeleton';
 import { BulkActionBar } from './bulk-action-bar';
 import { DeleteConfirmDialog } from './delete-confirm-dialog';
 import { UploadButton } from './upload-button';
@@ -15,7 +17,6 @@ export function DocumentsPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const { data: documents = [], isLoading, error } = useDocuments();
   const uploadMutation = useUploadDocument();
   const deleteDocumentsMutation = useDeleteDocuments();
 
@@ -25,13 +26,7 @@ export function DocumentsPage() {
     );
   };
 
-  const toggleAll = () => {
-    if (selectedIds.length === documents.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(documents.map((d) => d.fileKey));
-    }
-  };
+
 
   const handleDeleteClick = () => {
     if (selectedIds.length === 0) return;
@@ -43,17 +38,6 @@ export function DocumentsPage() {
     setSelectedIds([]);
     setDeleteDialogOpen(false);
   };
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-destructive mb-2">오류 발생</h2>
-          <p className="text-muted-foreground">문서 목록을 불러올 수 없습니다.</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen p-6 md:p-12 max-w-7xl mx-auto flex flex-col relative">
@@ -75,15 +59,17 @@ export function DocumentsPage() {
 
       <div className="flex-1 flex flex-col">
         <div className="tech-border bg-card flex-1 flex flex-col overflow-x-auto relative">
-          <DocumentTable
-            documents={documents}
-            isLoading={isLoading}
-            selectedIds={selectedIds}
-            sorting={sorting}
-            onSortingChange={setSorting}
-            onToggleSelection={toggleSelection}
-            onToggleAll={toggleAll}
-          />
+          <DocumentsErrorBoundary>
+            <Suspense fallback={<TableSkeleton />}>
+              <DocumentListWithToggleAll
+                selectedIds={selectedIds}
+                sorting={sorting}
+                onSortingChange={setSorting}
+                onToggleSelection={toggleSelection}
+                setSelectedIds={setSelectedIds}
+              />
+            </Suspense>
+          </DocumentsErrorBoundary>
         </div>
       </div>
 
@@ -101,5 +87,41 @@ export function DocumentsPage() {
         onConfirm={handleDeleteConfirm}
       />
     </div>
+  );
+}
+
+interface DocumentListWithToggleAllProps {
+  selectedIds: string[];
+  sorting: SortingState;
+  onSortingChange: OnChangeFn<SortingState>;
+  onToggleSelection: (fileKey: string) => void;
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+}
+
+function DocumentListWithToggleAll({
+  selectedIds,
+  sorting,
+  onSortingChange,
+  onToggleSelection,
+  setSelectedIds,
+}: DocumentListWithToggleAllProps) {
+  const { data: documents } = useDocumentsSuspense();
+
+  const toggleAll = () => {
+    if (selectedIds.length === documents.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(documents.map((d) => d.fileKey));
+    }
+  };
+
+  return (
+    <DocumentList
+      selectedIds={selectedIds}
+      sorting={sorting}
+      onSortingChange={onSortingChange}
+      onToggleSelection={onToggleSelection}
+      onToggleAll={toggleAll}
+    />
   );
 }
