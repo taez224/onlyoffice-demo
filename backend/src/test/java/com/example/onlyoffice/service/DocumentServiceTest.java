@@ -147,7 +147,6 @@ class DocumentServiceTest {
         verify(documentRepository).delete(document);
         verify(documentRepository).flush();
         verify(storageService).deleteFile(document.getStoragePath());
-        assertThat(document.getStatus()).isEqualTo(DocumentStatus.DELETED);
     }
 
     @Test
@@ -236,19 +235,7 @@ class DocumentServiceTest {
         assertThat(editorKey).isEqualTo("file-key_v3");
     }
 
-    @Test
-    @DisplayName("이미 삭제된 문서 삭제 시도 시 조기 반환 (멱등성)")
-    void deleteDocument_returnsEarlyWhenAlreadyDeleted() {
-        Document document = buildDocument();
-        document.setStatus(DocumentStatus.DELETED);
-        when(documentRepository.findWithLockById(document.getId()))
-                .thenReturn(Optional.of(document));
 
-        documentService.deleteDocument(document.getId());
-
-        verify(storageService, never()).deleteFile(anyString());
-        verify(documentRepository, never()).save(any(Document.class));
-    }
 
     @Test
     @DisplayName("빈 파일 업로드 시 예외 발생")

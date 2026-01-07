@@ -97,14 +97,8 @@ public class DocumentService {
         Document document = documentRepository.findWithLockById(id)
                 .orElseThrow(() -> new DocumentNotFoundException(id));
 
-        if (document.getStatus() == DocumentStatus.DELETED) {
-            log.info("Document already deleted. id={} storagePath={}", id, document.getStoragePath());
-            return;
-        }
-
         String storagePath = document.getStoragePath();
 
-        document.setStatus(DocumentStatus.DELETED);
         documentRepository.delete(document);
         documentRepository.flush();
 

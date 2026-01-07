@@ -46,7 +46,7 @@ class DocumentRepositoryTest {
                 .documentType("slide")
                 .fileSize(4096L)
                 .storagePath("documents/deleted.pptx")
-                .status(DocumentStatus.DELETED)
+                .status(DocumentStatus.ACTIVE)
                 .build());
         documentRepository.delete(toDelete);
         documentRepository.flush();

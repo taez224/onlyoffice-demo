@@ -61,6 +61,8 @@ public class Document { ... }
 - Use `repository.restore(id)` native query to undelete records
 - Repository methods no longer need `AndDeletedAtIsNull` suffix
 
+**Design decision**: `DocumentStatus` enum has only `PENDING` and `ACTIVE` — no `DELETED` value. The `deleted_at` column is the single source of truth for soft delete. This avoids redundant state management.
+
 **Repository pattern**:
 ```java
 findByFileKey(String fileKey)           // automatically excludes deleted
