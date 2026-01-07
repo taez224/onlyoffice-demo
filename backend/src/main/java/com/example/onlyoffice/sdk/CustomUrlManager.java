@@ -36,8 +36,7 @@ public class CustomUrlManager extends DefaultUrlManager {
 
     @Override
     public String getFileUrl(String fileId) {
-        // fileId is now fileKey (UUID)
-        return UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
+        return UriComponentsBuilder.fromUriString(serverBaseUrl)
                 .path("/files/{fileKey}")
                 .buildAndExpand(fileId)
                 .encode()
@@ -46,8 +45,7 @@ public class CustomUrlManager extends DefaultUrlManager {
 
     @Override
     public String getCallbackUrl(String fileId) {
-        // fileId is now fileKey (UUID)
-        return UriComponentsBuilder.fromHttpUrl(serverBaseUrl)
+        return UriComponentsBuilder.fromUriString(serverBaseUrl)
                 .path("/callback")
                 .queryParam("fileKey", fileId)
                 .encode()
@@ -56,8 +54,6 @@ public class CustomUrlManager extends DefaultUrlManager {
 
     @Override
     public String getGobackUrl(String fileId) {
-        // fileId is now fileKey (UUID)
-        // Redirect to frontend with fileKey parameter
         return serverBaseUrl + "/?fileKey=" + fileId;
     }
 

@@ -25,6 +25,5 @@ class DocumentTest {
         assertThat(document.getStatus()).isEqualTo(DocumentStatus.PENDING);
         assertThat(document.getVersion()).isEqualTo(1);
         assertThat(document.getCreatedBy()).isEqualTo("anonymous");
-        assertThat(document.getDeletedAt()).isNull();
     }
 }

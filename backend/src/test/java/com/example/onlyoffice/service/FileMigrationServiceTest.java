@@ -68,7 +68,7 @@ class FileMigrationServiceTest {
         Path testFile = tempDir.resolve("test.docx");
         Files.writeString(testFile, "test content");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull("test.docx"))
+        when(documentRepository.findByFileName("test.docx"))
                 .thenReturn(Optional.empty());
         when(documentRepository.save(any(Document.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -92,7 +92,7 @@ class FileMigrationServiceTest {
                 .fileName("existing.docx")
                 .fileKey("existing-key")
                 .build();
-        when(documentRepository.findByFileNameAndDeletedAtIsNull("existing.docx"))
+        when(documentRepository.findByFileName("existing.docx"))
                 .thenReturn(Optional.of(existingDoc));
 
         // when
@@ -117,7 +117,7 @@ class FileMigrationServiceTest {
         // then
         assertThat(report.getSuccesses()).isEmpty();
         assertThat(report.getSkipped()).isEmpty();
-        verify(documentRepository, never()).findByFileNameAndDeletedAtIsNull(anyString());
+        verify(documentRepository, never()).findByFileName(anyString());
     }
 
     @Test
@@ -129,9 +129,9 @@ class FileMigrationServiceTest {
         Files.writeString(newFile, "new content");
         Files.writeString(existingFile, "existing content");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull("new.xlsx"))
+        when(documentRepository.findByFileName("new.xlsx"))
                 .thenReturn(Optional.empty());
-        when(documentRepository.findByFileNameAndDeletedAtIsNull("existing.pptx"))
+        when(documentRepository.findByFileName("existing.pptx"))
                 .thenReturn(Optional.of(Document.builder().fileName("existing.pptx").build()));
         when(documentRepository.save(any(Document.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -151,7 +151,7 @@ class FileMigrationServiceTest {
         Path docxFile = tempDir.resolve("document.docx");
         Files.writeString(docxFile, "content");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull(anyString()))
+        when(documentRepository.findByFileName(anyString()))
                 .thenReturn(Optional.empty());
         when(documentRepository.save(any(Document.class)))
                 .thenAnswer(invocation -> {
@@ -174,7 +174,7 @@ class FileMigrationServiceTest {
         Path xlsxFile = tempDir.resolve("spreadsheet.xlsx");
         Files.writeString(xlsxFile, "content");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull(anyString()))
+        when(documentRepository.findByFileName(anyString()))
                 .thenReturn(Optional.empty());
         when(documentRepository.save(any(Document.class)))
                 .thenAnswer(invocation -> {
@@ -197,7 +197,7 @@ class FileMigrationServiceTest {
         Path pptxFile = tempDir.resolve("presentation.pptx");
         Files.writeString(pptxFile, "content");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull(anyString()))
+        when(documentRepository.findByFileName(anyString()))
                 .thenReturn(Optional.empty());
         when(documentRepository.save(any(Document.class)))
                 .thenAnswer(invocation -> {
@@ -220,7 +220,7 @@ class FileMigrationServiceTest {
         Path pdfFile = tempDir.resolve("document.pdf");
         Files.writeString(pdfFile, "content");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull(anyString()))
+        when(documentRepository.findByFileName(anyString()))
                 .thenReturn(Optional.empty());
         when(documentRepository.save(any(Document.class)))
                 .thenAnswer(invocation -> {
@@ -243,7 +243,7 @@ class FileMigrationServiceTest {
         Path unknownFile = tempDir.resolve("file.xyz");
         Files.writeString(unknownFile, "content");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull(anyString()))
+        when(documentRepository.findByFileName(anyString()))
                 .thenReturn(Optional.empty());
         when(documentRepository.save(any(Document.class)))
                 .thenAnswer(invocation -> {
@@ -266,7 +266,7 @@ class FileMigrationServiceTest {
         Path noExtFile = tempDir.resolve("noextension");
         Files.writeString(noExtFile, "content");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull(anyString()))
+        when(documentRepository.findByFileName(anyString()))
                 .thenReturn(Optional.empty());
         when(documentRepository.save(any(Document.class)))
                 .thenAnswer(invocation -> {
@@ -289,7 +289,7 @@ class FileMigrationServiceTest {
         Path testFile = tempDir.resolve("fail.docx");
         Files.writeString(testFile, "content");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull("fail.docx"))
+        when(documentRepository.findByFileName("fail.docx"))
                 .thenReturn(Optional.empty());
         when(documentRepository.save(any(Document.class)))
                 .thenThrow(new RuntimeException("DB error"));
@@ -309,7 +309,7 @@ class FileMigrationServiceTest {
         Path testFile = tempDir.resolve("sample.docx");
         Files.writeString(testFile, "sample content for testing");
 
-        when(documentRepository.findByFileNameAndDeletedAtIsNull("sample.docx"))
+        when(documentRepository.findByFileName("sample.docx"))
                 .thenReturn(Optional.empty());
         when(documentRepository.save(any(Document.class)))
                 .thenAnswer(invocation -> {

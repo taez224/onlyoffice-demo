@@ -11,181 +11,101 @@ import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Document entity 작업을 위한 Repository 인터페이스.
- * CRUD 작업과 soft delete 지원을 위한 커스텀 쿼리를 제공합니다.
+ * 문서 엔티티 저장소.
+ *
+ * <p>Hibernate 7의 {@code @SoftDelete} 어노테이션과 연동되어, 모든 조회 쿼리에서
+ * 삭제된 문서(deleted_at IS NOT NULL)가 자동으로 필터링됩니다.</p>
+ *
+ * <h3>주요 특징</h3>
+ * <ul>
+ *   <li><b>Soft Delete 자동 필터링</b>: 별도 조건 없이도 삭제된 문서 제외</li>
+ *   <li><b>비관적 락</b>: 동시성 제어를 위한 PESSIMISTIC_WRITE 락 지원</li>
+ *   <li><b>복원 기능</b>: native query를 통한 삭제된 문서 복원</li>
+ * </ul>
+ *
+ * @see com.example.onlyoffice.entity.Document
  */
 @Repository
 public interface DocumentRepository extends JpaRepository<Document, Long> {
 
-
     /**
-     * 파일명으로 문서 조회 (soft delete된 문서 제외)
-     * EditorController에서 에디터 설정 생성 시 사용
-     *
-     * @param fileName 파일명
-     * @return 문서가 존재하고 삭제되지 않았으면 해당 문서를 포함한 Optional
+     * 파일명으로 문서를 조회합니다.
+     * 동일한 파일명이 여러 개 존재할 수 있으므로 첫 번째 일치 항목을 반환합니다.
      */
-    Optional<Document> findByFileNameAndDeletedAtIsNull(String fileName);
-
-    // ==================== 기본 조회 메서드 ====================
+    Optional<Document> findByFileName(String fileName);
 
     /**
-     * 고유한 file key (ONLYOFFICE 문서 키)로 문서 조회
-     * 주로 callback 처리에서 사용
-     *
-     * @param fileKey 고유한 ONLYOFFICE 문서 키
-     * @return 문서가 존재하면 해당 문서를 포함한 Optional
+     * UUID 기반 fileKey로 문서를 조회합니다.
+     * fileKey는 고유하므로 정확히 하나의 문서를 반환합니다.
      */
     Optional<Document> findByFileKey(String fileKey);
 
     /**
-     * ID로 문서 조회 (soft delete된 문서 제외)
-     * 단일 활성 문서를 조회하는 주요 메서드
+     * ID로 문서를 조회하면서 비관적 쓰기 락을 획득합니다.
+     * 삭제 작업 시 동시성 충돌을 방지하기 위해 사용됩니다.
      *
-     * @param id 문서 ID
-     * @return 문서가 존재하고 삭제되지 않았으면 해당 문서를 포함한 Optional
-     */
-    Optional<Document> findByIdAndDeletedAtIsNull(Long id);
-
-    /**
-     * file key로 문서 조회 (soft delete된 문서 제외)
-     *
-     * @param fileKey 고유한 ONLYOFFICE 문서 키
-     * @return 문서가 존재하고 삭제되지 않았으면 해당 문서를 포함한 Optional
-     */
-    Optional<Document> findByFileKeyAndDeletedAtIsNull(String fileKey);
-
-    /**
-     * 비관적 락으로 문서를 조회 (Saga delete 흐름에서 사용)
-     *
-     * @param id 문서 ID
-     * @return 잠금이 걸린 문서 Optional
+     * @implNote 락 타임아웃: 3초. 타임아웃 초과 시 PessimisticLockException 발생
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
     Optional<Document> findWithLockById(Long id);
 
     /**
-     * 비관적 락으로 문서를 조회 (Callback 처리에서 사용)
-     * fileKey로 조회하며, soft delete된 문서는 제외합니다.
+     * fileKey로 문서를 조회하면서 비관적 쓰기 락을 획득합니다.
+     * ONLYOFFICE 콜백 처리 시 파일 덮어쓰기 경쟁 조건을 방지합니다.
      *
-     * @param fileKey 문서의 고유 키
-     * @return 잠금이 걸린 문서 Optional
+     * @implNote 동일 문서에 대한 SAVE/FORCESAVE 콜백이 동시에 도착할 때 순차 처리 보장
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
-    Optional<Document> findWithLockByFileKeyAndDeletedAtIsNull(String fileKey);
-
-    // ==================== 목록 조회 메서드 (Soft Delete 필터) ====================
+    Optional<Document> findWithLockByFileKey(String fileKey);
 
     /**
-     * 삭제되지 않은 모든 문서를 정렬하여 조회
-     *
-     * @param sort 정렬 조건
-     * @return 삭제되지 않은 문서 목록
+     * 특정 상태의 문서 목록을 정렬하여 조회합니다.
+     * 주로 ACTIVE 상태 문서를 생성일 역순으로 조회하는 데 사용됩니다.
      */
-    List<Document> findAllByDeletedAtIsNull(Sort sort);
+    List<Document> findAllByStatus(DocumentStatus status, Sort sort);
 
     /**
-     * 삭제되지 않은 모든 문서를 페이지네이션하여 조회
-     *
-     * @param pageable 페이지네이션 조건
-     * @return 삭제되지 않은 문서 페이지
+     * 특정 상태의 문서 목록을 페이징하여 조회합니다.
      */
-    Page<Document> findAllByDeletedAtIsNull(Pageable pageable);
+    Page<Document> findAllByStatus(DocumentStatus status, Pageable pageable);
 
     /**
-     * 상태별로 문서를 조회 (soft delete된 문서 제외)
-     *
-     * @param status 필터링할 문서 상태
-     * @param sort   정렬 조건
-     * @return 조건에 맞는 문서 목록
-     */
-    List<Document> findByStatusAndDeletedAtIsNull(DocumentStatus status, Sort sort);
-
-    /**
-     * 상태별로 문서를 페이지네이션하여 조회 (soft delete된 문서 제외)
-     *
-     * @param status   필터링할 문서 상태
-     * @param pageable 페이지네이션 조건
-     * @return 조건에 맞는 문서 페이지
-     */
-    Page<Document> findByStatusAndDeletedAtIsNull(DocumentStatus status, Pageable pageable);
-
-    // ==================== 존재 여부 확인 ====================
-
-    /**
-     * file key가 이미 존재하는지 확인 (고유성 검증용)
-     *
-     * @param fileKey 확인할 file key
-     * @return file key가 존재하면 true
+     * 해당 fileKey를 가진 문서가 존재하는지 확인합니다.
+     * 중복 키 검사에 사용됩니다.
      */
     boolean existsByFileKey(String fileKey);
 
     /**
-     * 문서가 존재하고 soft delete되지 않았는지 확인
-     *
-     * @param id 문서 ID
-     * @return 문서가 존재하고 활성 상태면 true
+     * 특정 상태의 문서 개수를 반환합니다.
+     * 대시보드 통계 등에 활용됩니다.
      */
-    boolean existsByIdAndDeletedAtIsNull(Long id);
-
-    // ==================== Soft Delete 작업 ====================
+    long countByStatus(DocumentStatus status);
 
     /**
-     * deletedAt 타임스탬프를 설정하여 문서를 soft delete
-     * 벌크 업데이트 효율성을 위해 JPQL 사용
+     * 파일명 패턴으로 문서를 검색합니다 (대소문자 무시).
      *
-     * @param id        문서 ID
-     * @param deletedAt 삭제 시각
-     * @return 업데이트된 행 수 (0 또는 1)
+     * @param fileNamePattern LIKE 패턴 (예: "%report%")
      */
-    @Modifying(clearAutomatically = true)
-    @Query("UPDATE Document d SET d.deletedAt = :deletedAt, d.status = 'DELETED' WHERE d.id = :id AND d.deletedAt IS NULL")
-    int softDelete(@Param("id") Long id, @Param("deletedAt") LocalDateTime deletedAt);
-
-    /**
-     * soft delete된 문서 복원
-     *
-     * @param id 문서 ID
-     * @return 업데이트된 행 수 (0 또는 1)
-     */
-    @Modifying(clearAutomatically = true)
-    @Query("UPDATE Document d SET d.deletedAt = NULL, d.status = 'ACTIVE' WHERE d.id = :id AND d.deletedAt IS NOT NULL")
-    int restore(@Param("id") Long id);
-
-    // ==================== 통계 쿼리 ====================
-
-    /**
-     * 상태별 문서 수 카운트 (soft delete 제외)
-     * 대시보드 통계에 유용
-     *
-     * @param status 카운트할 상태
-     * @return 해당 상태의 문서 수
-     */
-    long countByStatusAndDeletedAtIsNull(DocumentStatus status);
-
-    /**
-     * 삭제되지 않은 모든 문서 수 카운트
-     *
-     * @return 활성 문서 수
-     */
-    long countByDeletedAtIsNull();
-
-    // ==================== 검색 메서드 ====================
-
-    /**
-     * 파일명 패턴으로 문서 검색 (대소문자 구분 없음)
-     *
-     * @param fileNamePattern 검색 패턴 (와일드카드는 % 사용)
-     * @param pageable        페이지네이션 조건
-     * @return 조건에 맞는 문서 페이지
-     */
-    @Query("SELECT d FROM Document d WHERE LOWER(d.fileName) LIKE LOWER(:pattern) AND d.deletedAt IS NULL")
+    @Query("SELECT d FROM Document d WHERE LOWER(d.fileName) LIKE LOWER(:pattern)")
     Page<Document> searchByFileName(@Param("pattern") String fileNamePattern, Pageable pageable);
+
+    /**
+     * Soft Delete된 문서를 복원합니다.
+     *
+     * <p>Hibernate 7의 {@code @SoftDelete}는 자동 복원 메서드를 제공하지 않으므로,
+     * native query로 직접 deleted_at을 NULL로 설정합니다.</p>
+     *
+     * @param id 복원할 문서의 ID
+     * @return 업데이트된 행 수 (성공 시 1, 문서가 없으면 0)
+     * @implNote Saga 패턴에서 삭제 보상 트랜잭션으로 사용됨
+     */
+    @Modifying(clearAutomatically = true)
+    @Query(value = "UPDATE documents SET deleted_at = NULL, status = 'ACTIVE' WHERE id = :id", nativeQuery = true)
+    int restore(@Param("id") Long id);
 }

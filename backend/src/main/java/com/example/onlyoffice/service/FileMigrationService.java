@@ -77,7 +77,7 @@ public class FileMigrationService {
         String fileName = filePath.getFileName().toString();
 
         // 이미 DB에 존재하는 파일은 스킵
-        if (documentRepository.findByFileNameAndDeletedAtIsNull(fileName).isPresent()) {
+        if (documentRepository.findByFileName(fileName).isPresent()) {
             log.debug("Document already exists for fileName: {}, skipping", fileName);
             report.addSkipped(fileName);
             return;

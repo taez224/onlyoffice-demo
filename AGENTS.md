@@ -1,7 +1,7 @@
 # Claude Code Review Guide
 
 ## Project Snapshot
-- Spring Boot 3.5.8 (Java 21) backend + Next.js 16/React 19 frontend embedding ONLYOFFICE Document Server 9.1 via the Java SDK 1.7.0.
+- Spring Boot 4.0.1 (Java 21, Hibernate 7, Spring Framework 7) backend + Next.js 16/React 19 frontend embedding ONLYOFFICE Document Server 9.1 via the Java SDK 1.7.0.
 - Frontend uses App Router, TanStack Query for server state, shadcn/ui + Tailwind CSS for styling.
 - Storage is filesystem-based (`storage/`) and mounted for the Document Server container; docker-compose also provisions PostgreSQL + MinIO for future persistence.
 - JWT auth is enforced between backend and Document Server; `.env` defines shared secrets and infra credentials.
@@ -54,6 +54,14 @@ For smoke testing:
 - Frontend uses App Router conventions (`page.tsx`, `layout.tsx`), TanStack Query with Streaming SSR (`useSuspenseQuery` + Suspense), and custom hooks for mutations.
 - Favor SDK abstractions (`CustomSettingsManager`, `CustomDocumentManager`, `CustomUrlManager`) over ad-hoc JSON.
 
+## Hibernate 7 Soft Delete
+
+The `Document` entity uses Hibernate 7's native `@SoftDelete`:
+- `repository.delete(entity)` automatically sets `deleted_at` timestamp
+- All queries automatically filter out soft-deleted records
+- Use `repository.restore(id)` native query to undelete records
+- Repository methods no longer need `AndDeletedAtIsNull` suffix
+
 ## Review Priorities
 - **FileKey correctness**: verify all APIs use UUID fileKey (not fileName); check `editorKey` format is `{fileKey}_v{version}`; ensure fileKey validation via `KeyUtils.isValidKey()`.
 - **Config correctness**: verify document URLs, callback URLs, `key` generation, and JWT secret alignment (`onlyoffice.secret` vs `.env JWT_SECRET` vs docker-compose).
@@ -64,6 +72,7 @@ For smoke testing:
 
 ## Testing Expectations
 - Backend tests live in `backend/src/test/java`; mirror the source package, suffix with `Test`, and cover controller/service logic plus SDK helpers (see `CustomCallbackServiceTest`).
+- Use `@MockitoBean` (not deprecated `@MockBean`) for Spring Boot 4.0 compatibility.
 - Frontend specs are being added (`*.test.tsx`); when touching UI, stub ONLYOFFICE config fetches and assert query handling.
 - For regressions, run `./gradlew test` and `pnpm lint` minimally; mention additional manual doc-edit verification for complex flows.
 

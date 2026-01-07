@@ -7,39 +7,23 @@
 
 ## 테스트 컨벤션
 
-### 1. Mock 어노테이션: `@MockitoBean` 사용
+### 1. Mock 어노테이션: `@MockitoBean` 사용 (Spring Boot 4.0 필수)
 
-Spring Boot 3.4.0부터 `@MockBean`이 deprecated되었습니다. 새로운 `@MockitoBean`을 사용하세요.
+Spring Boot 4.0에서 `@MockBean`이 제거되었습니다. 반드시 `@MockitoBean`을 사용하세요.
 
 ```java
-// Bad - deprecated, 4.0.0에서 제거 예정
-import org.springframework.boot.test.mock.mockito.MockBean;
-@MockBean
-private SomeService someService;
-
-// Good - Spring Boot 3.4.0+
+// Spring Boot 4.0+
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
 @MockitoBean
 private SomeService someService;
 ```
 
 ### 2. Controller 테스트: `MockMvcTester` 사용
 
-Spring Boot 3.4.0에서 추가된 `MockMvcTester`는 AssertJ 기반의 fluent API를 제공합니다.
+`MockMvcTester`는 AssertJ 기반의 fluent API를 제공합니다.
 
 ```java
-// Bad - 기존 MockMvc 방식
-@Autowired
-private MockMvc mockMvc;
-
-@Test
-void test() throws Exception {
-    mockMvc.perform(get("/api/documents"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].id").value(1));
-}
-
-// Good - MockMvcTester 방식
 @Autowired
 private MockMvcTester mvc;
 
@@ -90,7 +74,7 @@ assertThat(result).bodyJson().extractingPath("$.name").isEqualTo("test");
 
 ```java
 @WebMvcTest(SomeController.class)
-@Import(GlobalExceptionHandler.class)  // 예외 핸들러 포함
+@Import(GlobalExceptionHandler.class)
 @DisplayName("SomeController")
 class SomeControllerTest {
 
@@ -121,13 +105,47 @@ class SomeControllerTest {
 }
 ```
 
-### 4. 테스트 네이밍 규칙
+### 4. Spring Boot 4.0 테스트 어노테이션 import 경로
+
+```java
+// DataJpaTest
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+
+// WebMvcTest  
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+
+// TestEntityManager
+import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+```
+
+### 5. Hibernate 7 @SoftDelete 테스트
+
+Hibernate 7의 `@SoftDelete` 사용 시 테스트 주의사항:
+
+```java
+// 삭제 테스트: repository.delete() 사용
+repository.delete(document);
+repository.flush();
+
+// 삭제된 문서는 findById에서 조회되지 않음
+assertThat(repository.findById(id)).isEmpty();
+
+// 복원 테스트: restore() native query 사용
+int count = repository.restore(id);
+assertThat(count).isEqualTo(1);
+
+// 복원 후 조회 가능
+Document restored = repository.findById(id).orElseThrow();
+assertThat(restored.getStatus()).isEqualTo(DocumentStatus.ACTIVE);
+```
+
+### 6. 테스트 네이밍 규칙
 
 - 클래스: `{ClassName}Test`
 - 메서드: `should{ExpectedBehavior}` 또는 `{methodName}_{scenario}_{expectedResult}`
 - `@DisplayName`: 한글로 명확하게 설명
 
-### 5. 테스트 실행
+### 7. 테스트 실행
 
 ```bash
 # 전체 테스트

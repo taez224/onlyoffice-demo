@@ -7,12 +7,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
-
-import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -41,7 +39,7 @@ class DocumentRepositoryTest {
                 .status(DocumentStatus.ACTIVE)
                 .build());
 
-        deletedDocument = documentRepository.save(Document.builder()
+        Document toDelete = documentRepository.save(Document.builder()
                 .fileName("deleted.pptx")
                 .fileKey("deleted-key-003")
                 .fileType("pptx")
@@ -49,8 +47,10 @@ class DocumentRepositoryTest {
                 .fileSize(4096L)
                 .storagePath("documents/deleted.pptx")
                 .status(DocumentStatus.DELETED)
-                .deletedAt(LocalDateTime.now())
                 .build());
+        documentRepository.delete(toDelete);
+        documentRepository.flush();
+        deletedDocument = toDelete;
     }
 
     @Nested
@@ -58,33 +58,26 @@ class DocumentRepositoryTest {
     class SoftDeleteTests {
 
         @Test
-        @DisplayName("문서를 soft delete할 수 있다")
+        @DisplayName("문서를 soft delete할 수 있다 (Hibernate 7 @SoftDelete)")
         void softDelete() {
-            // given
-            LocalDateTime deletedAt = LocalDateTime.now();
-
             // when
-            int updatedCount = documentRepository.softDelete(activeDocument.getId(), deletedAt);
+            documentRepository.delete(activeDocument);
+            documentRepository.flush();
 
             // then
-            assertThat(updatedCount).isEqualTo(1);
+            assertThat(documentRepository.findById(activeDocument.getId())).isEmpty();
 
-            Document result = documentRepository.findById(activeDocument.getId()).orElseThrow();
-            assertThat(result.getDeletedAt()).isNotNull();
-            assertThat(result.getStatus()).isEqualTo(DocumentStatus.DELETED);
+            int restoredCount = documentRepository.restore(activeDocument.getId());
+            assertThat(restoredCount).isEqualTo(1);
+
+            Document restored = documentRepository.findById(activeDocument.getId()).orElseThrow();
+            assertThat(restored.getStatus()).isEqualTo(DocumentStatus.ACTIVE);
         }
 
         @Test
-        @DisplayName("이미 삭제된 문서는 soft delete 영향 없음")
-        void softDeleteAlreadyDeleted() {
-            // given
-            LocalDateTime deletedAt = LocalDateTime.now();
-
-            // when
-            int updatedCount = documentRepository.softDelete(deletedDocument.getId(), deletedAt);
-
-            // then
-            assertThat(updatedCount).isEqualTo(0);
+        @DisplayName("이미 삭제된 문서는 findById에서 조회되지 않는다")
+        void softDeletedDocumentNotFoundByFindById() {
+            assertThat(documentRepository.findById(deletedDocument.getId())).isEmpty();
         }
 
         @Test
@@ -97,7 +90,6 @@ class DocumentRepositoryTest {
             assertThat(updatedCount).isEqualTo(1);
 
             Document result = documentRepository.findById(deletedDocument.getId()).orElseThrow();
-            assertThat(result.getDeletedAt()).isNull();
             assertThat(result.getStatus()).isEqualTo(DocumentStatus.ACTIVE);
         }
     }

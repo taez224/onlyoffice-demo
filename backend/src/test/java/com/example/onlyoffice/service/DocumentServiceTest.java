@@ -141,13 +141,13 @@ class DocumentServiceTest {
     void deleteDocument_softDeletesAndClearsObject() {
         Document document = buildDocument();
         when(documentRepository.findWithLockById(anyLong())).thenReturn(Optional.of(document));
-        when(documentRepository.save(document)).thenReturn(document);
 
         documentService.deleteDocument(document.getId());
 
+        verify(documentRepository).delete(document);
+        verify(documentRepository).flush();
         verify(storageService).deleteFile(document.getStoragePath());
         assertThat(document.getStatus()).isEqualTo(DocumentStatus.DELETED);
-        assertThat(document.getDeletedAt()).isNotNull();
     }
 
     @Test
@@ -155,17 +155,16 @@ class DocumentServiceTest {
     void deleteDocument_restoresStateWhenStorageFails() {
         Document document = buildDocument();
         when(documentRepository.findWithLockById(document.getId())).thenReturn(Optional.of(document));
-        when(documentRepository.save(document)).thenReturn(document);
         doThrow(new RuntimeException("delete boom"))
                 .when(storageService).deleteFile(document.getStoragePath());
+        when(documentRepository.restore(document.getId())).thenReturn(1);
 
         assertThatThrownBy(() -> documentService.deleteDocument(document.getId()))
                 .isInstanceOf(DocumentDeleteException.class)
                 .hasMessageContaining("Delete failed");
 
-        verify(documentRepository, times(2)).save(document);
-        assertThat(document.getStatus()).isEqualTo(DocumentStatus.ACTIVE);
-        assertThat(document.getDeletedAt()).isNull();
+        verify(documentRepository).delete(document);
+        verify(documentRepository).restore(document.getId());
     }
 
     @Test
@@ -173,7 +172,7 @@ class DocumentServiceTest {
     void downloadDocumentStream_returnsStorageStream() {
         Document document = buildDocument();
         ByteArrayInputStream inputStream = new ByteArrayInputStream("hello".getBytes());
-        when(documentRepository.findByFileKeyAndDeletedAtIsNull(document.getFileKey()))
+        when(documentRepository.findByFileKey(document.getFileKey()))
                 .thenReturn(Optional.of(document));
         when(storageService.downloadFile(document.getStoragePath())).thenReturn(inputStream);
 
@@ -186,7 +185,7 @@ class DocumentServiceTest {
     @DisplayName("ACTIVE 상태 문서만 생성일 내림차순으로 조회한다")
     void getActiveDocuments_returnsSortedActiveDocuments() {
         Document document = buildDocument();
-        when(documentRepository.findByStatusAndDeletedAtIsNull(eq(DocumentStatus.ACTIVE), any(Sort.class)))
+        when(documentRepository.findAllByStatus(eq(DocumentStatus.ACTIVE), any(Sort.class)))
                 .thenReturn(List.of(document));
 
         List<Document> documents = documentService.getActiveDocuments();
@@ -194,7 +193,7 @@ class DocumentServiceTest {
         assertThat(documents).containsExactly(document);
 
         ArgumentCaptor<Sort> sortCaptor = ArgumentCaptor.forClass(Sort.class);
-        verify(documentRepository).findByStatusAndDeletedAtIsNull(eq(DocumentStatus.ACTIVE), sortCaptor.capture());
+        verify(documentRepository).findAllByStatus(eq(DocumentStatus.ACTIVE), sortCaptor.capture());
         Sort sort = sortCaptor.getValue();
         assertThat(sort.getOrderFor("createdAt")).isNotNull();
         assertThat(sort.getOrderFor("createdAt").getDirection()).isEqualTo(Sort.Direction.DESC);
@@ -204,7 +203,7 @@ class DocumentServiceTest {
     @DisplayName("findByFileKey - 존재하는 문서 조회 성공")
     void findByFileKey_returnsDocumentWhenExists() {
         Document document = buildDocument();
-        when(documentRepository.findByFileKeyAndDeletedAtIsNull("file-key"))
+        when(documentRepository.findByFileKey("file-key"))
                 .thenReturn(Optional.of(document));
 
         Optional<Document> result = documentService.findByFileKey("file-key");
@@ -216,7 +215,7 @@ class DocumentServiceTest {
     @Test
     @DisplayName("findByFileKey - 존재하지 않는 문서 조회 시 빈 Optional 반환")
     void findByFileKey_returnsEmptyWhenNotExists() {
-        when(documentRepository.findByFileKeyAndDeletedAtIsNull("non-existent"))
+        when(documentRepository.findByFileKey("non-existent"))
                 .thenReturn(Optional.empty());
 
         Optional<Document> result = documentService.findByFileKey("non-existent");
@@ -229,7 +228,7 @@ class DocumentServiceTest {
     void getEditorKeyByFileKey_returnsEditorKey() {
         Document document = buildDocument();
         document.setEditorVersion(3);
-        when(documentRepository.findByFileKeyAndDeletedAtIsNull("file-key"))
+        when(documentRepository.findByFileKey("file-key"))
                 .thenReturn(Optional.of(document));
 
         String editorKey = documentService.getEditorKeyByFileKey("file-key");
@@ -242,7 +241,6 @@ class DocumentServiceTest {
     void deleteDocument_returnsEarlyWhenAlreadyDeleted() {
         Document document = buildDocument();
         document.setStatus(DocumentStatus.DELETED);
-        document.setDeletedAt(LocalDateTime.now());
         when(documentRepository.findWithLockById(document.getId()))
                 .thenReturn(Optional.of(document));
 
@@ -316,7 +314,7 @@ class DocumentServiceTest {
         // given
         Document document = buildDocument();
         document.setEditorVersion(1);
-        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+        when(documentRepository.findWithLockByFileKey("file-key"))
                 .thenReturn(Optional.of(document));
         when(urlDownloadService.downloadAndSave(anyString(), anyString()))
                 .thenReturn(new UrlDownloadService.DownloadResult(2048L));
@@ -337,7 +335,7 @@ class DocumentServiceTest {
         // given
         Document document = buildDocument();
         document.setEditorVersion(3);
-        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+        when(documentRepository.findWithLockByFileKey("file-key"))
                 .thenReturn(Optional.of(document));
         when(urlDownloadService.downloadAndSave(anyString(), anyString()))
                 .thenReturn(new UrlDownloadService.DownloadResult(4096L));
@@ -357,7 +355,7 @@ class DocumentServiceTest {
     void processCallbackSave_throwsWhenDownloadFails() {
         Document document = buildDocument();
         document.setEditorVersion(1);
-        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+        when(documentRepository.findWithLockByFileKey("file-key"))
                 .thenReturn(Optional.of(document));
         when(urlDownloadService.downloadAndSave(anyString(), anyString()))
                 .thenThrow(new RuntimeException("Download failed"));
@@ -366,7 +364,7 @@ class DocumentServiceTest {
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Failed to save document from URL");
 
-        verify(documentRepository).findWithLockByFileKeyAndDeletedAtIsNull("file-key");
+        verify(documentRepository).findWithLockByFileKey("file-key");
     }
 
     @Test
@@ -374,7 +372,7 @@ class DocumentServiceTest {
     void processCallbackForceSave_throwsWhenDownloadFails() {
         Document document = buildDocument();
         document.setEditorVersion(1);
-        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("file-key"))
+        when(documentRepository.findWithLockByFileKey("file-key"))
                 .thenReturn(Optional.of(document));
         when(urlDownloadService.downloadAndSave(anyString(), anyString()))
                 .thenThrow(new RuntimeException("Download failed"));
@@ -383,13 +381,13 @@ class DocumentServiceTest {
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Failed to save document from URL");
 
-        verify(documentRepository).findWithLockByFileKeyAndDeletedAtIsNull("file-key");
+        verify(documentRepository).findWithLockByFileKey("file-key");
     }
 
     @Test
     @DisplayName("processCallbackSave - 존재하지 않는 문서 시 예외 발생")
     void processCallbackSave_throwsWhenDocumentNotFound() {
-        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("non-existent"))
+        when(documentRepository.findWithLockByFileKey("non-existent"))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> documentService.processCallbackSave("http://url/doc.docx", "non-existent"))
@@ -400,7 +398,7 @@ class DocumentServiceTest {
     @Test
     @DisplayName("processCallbackForceSave - 존재하지 않는 문서 시 예외 발생")
     void processCallbackForceSave_throwsWhenDocumentNotFound() {
-        when(documentRepository.findWithLockByFileKeyAndDeletedAtIsNull("non-existent"))
+        when(documentRepository.findWithLockByFileKey("non-existent"))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> documentService.processCallbackForceSave("http://url/doc.docx", "non-existent"))
