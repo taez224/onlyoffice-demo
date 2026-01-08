@@ -11,6 +11,7 @@ export function useUploadDocument() {
 
   return useMutation({
     mutationFn: uploadDocument,
+    retry: 0,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
       toast.success(`${data.fileName} 업로드 완료`);

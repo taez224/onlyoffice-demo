@@ -12,6 +12,7 @@ export function useDeleteDocument() {
 
   return useMutation({
     mutationFn: deleteDocument,
+    retry: 0,
     onMutate: async (fileKey) => {
       await queryClient.cancelQueries({ queryKey: documentKeys.lists() });
 
