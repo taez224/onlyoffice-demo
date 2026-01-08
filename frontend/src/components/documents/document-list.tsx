@@ -1,10 +1,11 @@
 'use client';
 
 import type { SortingState, OnChangeFn } from '@tanstack/react-table';
-import { useDocumentsSuspense } from '@/hooks/use-documents';
 import { DocumentTable } from './document-table';
+import type { DocumentResponse } from '@/types/document';
 
 interface DocumentListProps {
+  documents: DocumentResponse[];
   selectedIds: string[];
   sorting: SortingState;
   onSortingChange: OnChangeFn<SortingState>;
@@ -13,18 +14,16 @@ interface DocumentListProps {
 }
 
 export function DocumentList({
+  documents,
   selectedIds,
   sorting,
   onSortingChange,
   onToggleSelection,
   onToggleAll,
 }: DocumentListProps) {
-  const { data: documents } = useDocumentsSuspense();
-
   return (
     <DocumentTable
       documents={documents}
-      isLoading={false}
       selectedIds={selectedIds}
       sorting={sorting}
       onSortingChange={onSortingChange}

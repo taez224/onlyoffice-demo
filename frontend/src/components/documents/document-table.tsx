@@ -30,7 +30,6 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Loader2,
 } from 'lucide-react';
 import { formatFileSize, formatDateTime } from '@/lib/format';
 import type { DocumentResponse } from '@/types/document';
@@ -244,7 +243,6 @@ const columns: ColumnDef<DocumentResponse>[] = [
 
 interface DocumentTableProps {
   documents: DocumentResponse[];
-  isLoading: boolean;
   selectedIds: string[];
   sorting: SortingState;
   onSortingChange: OnChangeFn<SortingState>;
@@ -254,7 +252,6 @@ interface DocumentTableProps {
 
 export function DocumentTable({
   documents,
-  isLoading,
   selectedIds,
   sorting,
   onSortingChange,
@@ -269,14 +266,6 @@ export function DocumentTable({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
-
-  if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={32} className="animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-w-max">

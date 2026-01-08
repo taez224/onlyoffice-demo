@@ -117,6 +117,7 @@ function DocumentListWithToggleAll({
 
   return (
     <DocumentList
+      documents={documents}
       selectedIds={selectedIds}
       sorting={sorting}
       onSortingChange={onSortingChange}
