@@ -21,6 +21,9 @@ public class CallbackQueueService {
     @Value("${callback.executor.cleanup-interval-minutes:5}")
     private long cleanupIntervalMinutes;
 
+    @Value("${callback.executor.max-submit-retries:3}")
+    private int maxSubmitRetries = 3;
+
     // Single map containing managed executors with atomic state transitions
     // Replaces previous dual-map approach (documentQueues + lastAccessTime)
     private final ConcurrentHashMap<String, ManagedExecutor> documentExecutors = new ConcurrentHashMap<>();
@@ -65,8 +68,7 @@ public class CallbackQueueService {
     public <T> T submitAndWait(String fileKey, Callable<T> task, long timeout, TimeUnit unit) throws Exception {
         log.debug("Queueing callback for fileKey: {}", fileKey);
 
-        final int maxRetries = 3;
-        for (int attempt = 0; attempt < maxRetries; attempt++) {
+        for (int attempt = 0; attempt < maxSubmitRetries; attempt++) {
             ManagedExecutor managed = documentExecutors.computeIfAbsent(fileKey, key ->
                     new ManagedExecutor(key, createExecutor(key))
             );
@@ -96,11 +98,11 @@ public class CallbackQueueService {
                     throw e;
                 }
             } else {
-                log.info("Executor shutting down for fileKey: {}, attempt {}/{}", fileKey, attempt + 1, maxRetries);
+                log.info("Executor shutting down for fileKey: {}, attempt {}/{}", fileKey, attempt + 1, maxSubmitRetries);
                 documentExecutors.remove(fileKey, managed);
             }
         }
-        throw new IllegalStateException("Failed to submit callback task after " + maxRetries + " retries for fileKey: " + fileKey);
+        throw new IllegalStateException("Failed to submit callback task after " + maxSubmitRetries + " retries for fileKey: " + fileKey);
     }
 
     /**
