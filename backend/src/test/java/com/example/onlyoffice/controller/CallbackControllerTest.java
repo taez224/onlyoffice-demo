@@ -86,7 +86,7 @@ class CallbackControllerTest {
             when(settingsManager.getSecurityHeader()).thenReturn("Authorization");
             when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
                     .thenReturn(callback);
-            doThrow(new IllegalArgumentException("Download URL is required"))
+            doThrow(new RuntimeException("Unexpected error"))
                     .when(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
 
             // when
@@ -97,7 +97,7 @@ class CallbackControllerTest {
                     .content(callbackJson)
                     .exchange();
 
-            // then
+            // then - retryable errors return error: 1
             assertThat(result).hasStatusOk();
             assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(1);
 

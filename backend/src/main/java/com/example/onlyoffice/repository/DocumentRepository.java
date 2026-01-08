@@ -95,17 +95,11 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
     @Query("SELECT d FROM Document d WHERE LOWER(d.fileName) LIKE LOWER(:pattern)")
     Page<Document> searchByFileName(@Param("pattern") String fileNamePattern, Pageable pageable);
 
-    /**
-     * Soft Delete된 문서를 복원합니다.
-     *
-     * <p>Hibernate 7의 {@code @SoftDelete}는 자동 복원 메서드를 제공하지 않으므로,
-     * native query로 직접 deleted_at을 NULL로 설정합니다.</p>
-     *
-     * @param id 복원할 문서의 ID
-     * @return 업데이트된 행 수 (성공 시 1, 문서가 없으면 0)
-     * @implNote Saga 패턴에서 삭제 보상 트랜잭션으로 사용됨
-     */
     @Modifying(clearAutomatically = true)
-    @Query(value = "UPDATE documents SET deleted_at = NULL, status = 'ACTIVE' WHERE id = :id", nativeQuery = true)
-    int restore(@Param("id") Long id);
+    @Query(value = "UPDATE documents SET deleted_at = NULL, status = :status WHERE id = :id", nativeQuery = true)
+    int restoreWithStatusInternal(@Param("id") Long id, @Param("status") String status);
+
+    default int restoreWithStatus(Long id, DocumentStatus status) {
+        return restoreWithStatusInternal(id, status.name());
+    }
 }

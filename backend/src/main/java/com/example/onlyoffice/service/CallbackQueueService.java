@@ -65,17 +65,15 @@ public class CallbackQueueService {
     public <T> T submitAndWait(String fileKey, Callable<T> task, long timeout, TimeUnit unit) throws Exception {
         log.debug("Queueing callback for fileKey: {}", fileKey);
 
-        // Retry loop: if executor is shutting down, create new one
-        while (true) {
+        final int maxRetries = 3;
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
             ManagedExecutor managed = documentExecutors.computeIfAbsent(fileKey, key ->
                     new ManagedExecutor(key, createExecutor(key))
             );
 
-            // Attempt to submit task atomically
             Future<T> future = managed.trySubmit(task);
 
             if (future != null) {
-                // Successfully submitted
                 try {
                     T result = future.get(timeout, unit);
                     log.debug("Callback completed successfully for fileKey: {}", fileKey);
@@ -98,12 +96,11 @@ public class CallbackQueueService {
                     throw e;
                 }
             } else {
-                // Executor is shutting down, remove it and retry with new executor
-                log.info("Executor shutting down for fileKey: {}, creating new one", fileKey);
+                log.info("Executor shutting down for fileKey: {}, attempt {}/{}", fileKey, attempt + 1, maxRetries);
                 documentExecutors.remove(fileKey, managed);
-                // Loop continues with fresh executor
             }
         }
+        throw new IllegalStateException("Failed to submit callback task after " + maxRetries + " retries for fileKey: " + fileKey);
     }
 
     /**
