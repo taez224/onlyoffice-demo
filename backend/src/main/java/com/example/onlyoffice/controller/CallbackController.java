@@ -1,5 +1,6 @@
 package com.example.onlyoffice.controller;
 
+import com.example.onlyoffice.exception.DocumentNotFoundException;
 import com.example.onlyoffice.sdk.CustomSettingsManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.onlyoffice.model.documenteditor.Callback;
@@ -79,6 +80,9 @@ public class CallbackController {
             log.warn("Lock timeout for callback, ONLYOFFICE should retry: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(Map.of("error", 1, "message", "Document is locked, please retry"));
+        } catch (DocumentNotFoundException | IllegalArgumentException e) {
+            log.error("Callback failed (non-retryable): {}", e.getMessage());
+            return ResponseEntity.ok(Map.of("error", 1));
         } catch (Exception e) {
             log.error("Callback processing failed", e);
             return ResponseEntity.ok(Map.of("error", 1));

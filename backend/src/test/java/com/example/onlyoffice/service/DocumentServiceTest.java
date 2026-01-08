@@ -156,14 +156,14 @@ class DocumentServiceTest {
         when(documentRepository.findWithLockById(document.getId())).thenReturn(Optional.of(document));
         doThrow(new RuntimeException("delete boom"))
                 .when(storageService).deleteFile(document.getStoragePath());
-        when(documentRepository.restore(document.getId())).thenReturn(1);
+        when(documentRepository.restoreWithStatus(document.getId(), document.getStatus())).thenReturn(1);
 
         assertThatThrownBy(() -> documentService.deleteDocument(document.getId()))
                 .isInstanceOf(DocumentDeleteException.class)
                 .hasMessageContaining("Delete failed");
 
         verify(documentRepository).delete(document);
-        verify(documentRepository).restore(document.getId());
+        verify(documentRepository).restoreWithStatus(document.getId(), document.getStatus());
     }
 
     @Test

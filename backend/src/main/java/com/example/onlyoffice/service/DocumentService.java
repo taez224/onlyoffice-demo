@@ -98,14 +98,16 @@ public class DocumentService {
                 .orElseThrow(() -> new DocumentNotFoundException(id));
 
         String storagePath = document.getStoragePath();
+        DocumentStatus originalStatus = document.getStatus();
 
         documentRepository.delete(document);
+        // flush() syncs to DB but does NOT commit - transaction still active for rollback
         documentRepository.flush();
 
         try {
             storageService.deleteFile(storagePath);
         } catch (Exception e) {
-            documentRepository.restore(id);
+            documentRepository.restoreWithStatus(id, originalStatus);
             throw new DocumentDeleteException("Delete failed for document id " + id, e);
         }
     }

@@ -1,6 +1,7 @@
 package com.example.onlyoffice.service;
 
 import org.junit.jupiter.api.*;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -410,6 +411,38 @@ class CallbackQueueServiceTest {
         }
     }
 
+
+    @Nested
+    @DisplayName("Retry Exhaustion")
+    class RetryExhaustion {
+
+        @Test
+        @DisplayName("should throw IllegalStateException when max retries exhausted")
+        void shouldThrowIllegalStateExceptionWhenRetriesExhausted() {
+            // given
+            ReflectionTestUtils.setField(callbackQueueService, "maxSubmitRetries", 0);
+
+            // when/then
+            assertThatThrownBy(() ->
+                    callbackQueueService.submitAndWait("fileKey", () -> "result")
+            ).isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Failed to submit callback task after 0 retries");
+        }
+
+        @Test
+        @DisplayName("should include fileKey in exception message")
+        void shouldIncludeFileKeyInExceptionMessage() {
+            // given
+            ReflectionTestUtils.setField(callbackQueueService, "maxSubmitRetries", 0);
+            String fileKey = "test-file-key-123";
+
+            // when/then
+            assertThatThrownBy(() ->
+                    callbackQueueService.submitAndWait(fileKey, () -> "result")
+            ).isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining(fileKey);
+        }
+    }
 
     @Nested
     @DisplayName("Race Condition Prevention")

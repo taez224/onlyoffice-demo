@@ -67,7 +67,7 @@ class DocumentRepositoryTest {
             // then
             assertThat(documentRepository.findById(activeDocument.getId())).isEmpty();
 
-            int restoredCount = documentRepository.restore(activeDocument.getId());
+            int restoredCount = documentRepository.restoreWithStatus(activeDocument.getId(), DocumentStatus.ACTIVE);
             assertThat(restoredCount).isEqualTo(1);
 
             Document restored = documentRepository.findById(activeDocument.getId()).orElseThrow();
@@ -84,7 +84,7 @@ class DocumentRepositoryTest {
         @DisplayName("삭제된 문서를 복원할 수 있다")
         void restore() {
             // when
-            int updatedCount = documentRepository.restore(deletedDocument.getId());
+            int updatedCount = documentRepository.restoreWithStatus(deletedDocument.getId(), DocumentStatus.ACTIVE);
 
             // then
             assertThat(updatedCount).isEqualTo(1);
@@ -97,7 +97,7 @@ class DocumentRepositoryTest {
         @DisplayName("존재하지 않는 ID로 복원 시 0을 반환한다")
         void restore_withInvalidId_returnsZero() {
             // when
-            int updatedCount = documentRepository.restore(999999L);
+            int updatedCount = documentRepository.restoreWithStatus(999999L, DocumentStatus.ACTIVE);
 
             // then
             assertThat(updatedCount).isEqualTo(0);

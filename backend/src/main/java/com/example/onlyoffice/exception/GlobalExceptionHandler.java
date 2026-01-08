@@ -140,4 +140,17 @@ public class GlobalExceptionHandler {
 
         return problemDetail;
     }
+
+    @ExceptionHandler(SecurityValidationException.class)
+    public ProblemDetail handleSecurityValidationException(SecurityValidationException e) {
+        log.warn("Security validation failed: {}", e.getMessage());
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                e.getMessage()
+        );
+        problemDetail.setTitle("Security Validation Error");
+
+        return problemDetail;
+    }
 }
