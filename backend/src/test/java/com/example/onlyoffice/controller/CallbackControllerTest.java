@@ -1,5 +1,6 @@
 package com.example.onlyoffice.controller;
 
+import com.example.onlyoffice.exception.DocumentNotFoundException;
 import com.example.onlyoffice.sdk.CustomSettingsManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.onlyoffice.model.documenteditor.Callback;
@@ -252,6 +253,67 @@ class CallbackControllerTest {
             // then
             assertThat(result).hasStatusOk();
             assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(0);
+
+            verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
+        }
+    }
+
+    @Nested
+    @DisplayName("Non-Retryable Error Handling")
+    class NonRetryableErrors {
+
+        @Test
+        @DisplayName("DocumentNotFoundException 발생 시 error: 1 반환 (non-retryable)")
+        void shouldReturnErrorForDocumentNotFound() throws Exception {
+            // given
+            Callback callback = createCallback(Status.SAVE, DOWNLOAD_URL);
+            String callbackJson = objectMapper.writeValueAsString(callback);
+
+            when(settingsManager.getSecurityHeader()).thenReturn("Authorization");
+            when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
+                    .thenReturn(callback);
+            doThrow(new DocumentNotFoundException("Document not found for fileKey: " + FILE_KEY))
+                    .when(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
+
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", JWT_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(1);
+
+            verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
+        }
+
+        @Test
+        @DisplayName("IllegalArgumentException 발생 시 error: 1 반환 (non-retryable)")
+        void shouldReturnErrorForIllegalArgument() throws Exception {
+            // given
+            Callback callback = createCallback(Status.SAVE, DOWNLOAD_URL);
+            String callbackJson = objectMapper.writeValueAsString(callback);
+
+            when(settingsManager.getSecurityHeader()).thenReturn("Authorization");
+            when(callbackService.verifyCallback(any(Callback.class), eq(JWT_TOKEN)))
+                    .thenReturn(callback);
+            doThrow(new IllegalArgumentException("Invalid callback data"))
+                    .when(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
+
+            // when
+            MvcTestResult result = mvc.post().uri(CALLBACK_URL)
+                    .param("fileKey", FILE_KEY)
+                    .header("Authorization", JWT_TOKEN)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(callbackJson)
+                    .exchange();
+
+            // then
+            assertThat(result).hasStatusOk();
+            assertThat(result).bodyJson().extractingPath("$.error").isEqualTo(1);
 
             verify(callbackService).processCallback(any(Callback.class), eq(FILE_KEY));
         }

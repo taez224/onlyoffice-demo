@@ -101,6 +101,7 @@ public class DocumentService {
         DocumentStatus originalStatus = document.getStatus();
 
         documentRepository.delete(document);
+        // flush() syncs to DB but does NOT commit - transaction still active for rollback
         documentRepository.flush();
 
         try {
