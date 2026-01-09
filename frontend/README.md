@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ONLYOFFICE Demo - Frontend
 
-## Getting Started
+Next.js 16 + React 19 기반 문서 편집 애플리케이션
 
-First, run the development server:
+## 기술 스택
+
+- Next.js 16 (App Router)
+- React 19 + TypeScript 5
+- TanStack Query (서버 상태 관리)
+- TanStack Table (데이터 테이블)
+- shadcn/ui + Tailwind CSS
+
+## 시작하기
+
+### 설치
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 개발 서버
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+http://localhost:3000 에서 확인
 
-## Learn More
+### 빌드
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm build
+pnpm start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 프로젝트 구조
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+├── app/           # App Router 페이지
+│   ├── page.tsx           # 문서 목록
+│   └── editor/[fileKey]/  # 문서 편집기
+├── components/    # React 컴포넌트
+│   ├── documents/         # 문서 관련 컴포넌트
+│   ├── providers/         # Context Provider
+│   └── ui/                # shadcn/ui 컴포넌트
+├── hooks/         # 커스텀 훅
+├── lib/           # 유틸리티
+├── api/           # API 호출 함수
+└── types/         # TypeScript 타입
+```
 
-## Deploy on Vercel
+## 스크립트
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| 명령어 | 설명 |
+|--------|------|
+| `pnpm dev` | 개발 서버 실행 |
+| `pnpm build` | 프로덕션 빌드 |
+| `pnpm start` | 프로덕션 서버 실행 |
+| `pnpm lint` | ESLint 검사 |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 환경 변수
+
+`next.config.ts`에서 `/api` 요청을 백엔드로 프록시함
+기본값: `http://localhost:8080`
+
+## 문제 해결
+
+- **API 호출 실패**: 백엔드 서버 실행 확인
+- **에디터 로딩 실패**: Document Server 상태 및 JWT 설정 확인
