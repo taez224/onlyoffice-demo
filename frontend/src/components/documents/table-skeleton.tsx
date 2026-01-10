@@ -1,5 +1,3 @@
-'use client';
-
 export function TableSkeleton() {
   return (
     <div className="min-w-max">

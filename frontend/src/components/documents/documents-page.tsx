@@ -6,7 +6,7 @@ import { useUploadDocument } from '@/hooks/use-upload-document';
 import { useDeleteDocuments } from '@/hooks/use-delete-documents';
 import { useDocumentsSuspense } from '@/hooks/use-documents';
 import { DocumentsErrorBoundary } from './documents-error-boundary';
-import { DocumentList } from './document-list';
+import { DocumentTable } from './document-table';
 import { TableSkeleton } from './table-skeleton';
 import { BulkActionBar } from './bulk-action-bar';
 import { DeleteConfirmDialog } from './delete-confirm-dialog';
@@ -116,7 +116,7 @@ function DocumentListWithToggleAll({
   };
 
   return (
-    <DocumentList
+    <DocumentTable
       documents={documents}
       selectedIds={selectedIds}
       sorting={sorting}
