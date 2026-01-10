@@ -1,8 +1,6 @@
 # ONLYOFFICE 문서 편집기 통합 데모
 
-Spring Boot + React 기반 ONLYOFFICE Document Server 연동 예제 프로젝트입니다.
-
-**✨ Type-safe ONLYOFFICE SDK 통합** - Java SDK를 활용한 안전하고 유지보수 가능한 구현
+Spring Boot 4 + Next.js 16 기반 ONLYOFFICE Document Server 연동 예제 프로젝트입니다.
 
 ## 프로젝트 구조
 
@@ -10,38 +8,23 @@ Spring Boot + React 기반 ONLYOFFICE Document Server 연동 예제 프로젝트
 onlyoffice-demo/
 ├── backend/                                     # Spring Boot 백엔드
 │   ├── src/main/java/com/example/onlyoffice/
-│   │   ├── config/
-│   │   │   └── OnlyOfficeConfig.java           # SDK Beans 설정
-│   │   ├── controller/
-│   │   │   ├── EditorController.java           # 에디터 설정 API
-│   │   │   ├── CallbackController.java         # ONLYOFFICE 콜백 처리 (SDK Callback 모델)
-│   │   │   └── FileController.java             # 파일 다운로드 API
-│   │   ├── sdk/
-│   │   │   ├── CustomSettingsManager.java      # SDK SettingsManager 구현
-│   │   │   ├── CustomDocumentManager.java      # SDK DocumentManager 구현
-│   │   │   └── CustomUrlManager.java           # SDK UrlManager 구현
-│   │   ├── service/
-│   │   │   ├── DocumentService.java            # 파일 관리 서비스
-│   │   │   └── EditorConfigService.java        # SDK ConfigService 래퍼
-│   │   └── util/
-│   │       └── KeyUtils.java                   # 문서 키 유틸리티
+│   │   ├── config/                              # SDK/보안/MinIO 설정
+│   │   ├── controller/                          # Document/Callback/File API
+│   │   ├── entity/                              # JPA 엔티티 (Hibernate 7 Soft Delete)
+│   │   ├── sdk/                                 # ONLYOFFICE SDK 커스텀 매니저
+│   │   ├── service/                             # 문서/콜백/저장소 서비스
+│   │   └── util/                                # KeyUtils (UUID/Editor Key)
 │   ├── src/main/resources/
-│   │   └── application.yml                     # 애플리케이션 설정
-│   ├── storage/                                # 로컬 문서 저장소
-│   │   ├── sample.docx
-│   │   ├── sample.xlsx
-│   │   ├── sample.pptx
-│   │   └── sample.pdf
-│   └── build.gradle                            # Gradle 빌드 설정 (ONLYOFFICE SDK)
+│   │   └── application.yml                      # 애플리케이션 설정
+│   └── build.gradle                             # Gradle 빌드 설정
 │
-└── frontend/                                    # React 프론트엔드
-    ├── src/
-    │   ├── components/
-    │   │   └── Editor.tsx                      # ONLYOFFICE 에디터 컴포넌트
-    │   ├── App.tsx                             # 메인 앱
-    │   └── main.tsx                            # 엔트리 포인트
-    ├── vite.config.ts                          # Vite 설정 (API 프록시)
-    └── package.json
+└── frontend/                                    # Next.js 프론트엔드 (App Router)
+    ├── src/app/                                 # 라우팅 (page.tsx, layout.tsx)
+    │   └── editor/[fileKey]/page.tsx            # 에디터 페이지
+    ├── src/components/                          # UI 컴포넌트
+    ├── src/hooks/                               # TanStack Query 훅
+    ├── src/lib/                                 # API 클라이언트/유틸
+    └── next.config.ts                           # /api 리라이트
 ```
 
 ## 주요 기능
@@ -51,129 +34,88 @@ onlyoffice-demo/
 - ONLYOFFICE Document Server를 통한 브라우저 기반 편집
 - 실시간 협업 편집 가능
 
-### 2. JWT 기반 보안 (활성화됨)
-- JWT 생성 로직이 구현되어 있고 활성화됨
-- ONLYOFFICE Document Server가 JWT를 검증하도록 설정됨 (`JWT_ENABLED=true`)
-- `.env` 파일에서 JWT Secret을 관리
+### 2. UUID 기반 fileKey
+- 문서는 UUID 기반 `fileKey`로 식별
+- 에디터 키는 `{fileKey}_v{version}` 형식 사용
 
-### 3. 자동 저장
-- 편집 완료 시 ONLYOFFICE에서 콜백 호출
-- Backend가 변경된 문서를 자동으로 저장
-  - 현재 로컬 디렉토리에 저장, 추후 고도화 예정
-- 버전 관리를 위한 타임스탬프 기반 키 생성
+### 3. JWT 기반 보안 (활성화됨)
+- ONLYOFFICE Document Server와 백엔드 간 JWT 서명/검증
+- `.env`의 `JWT_SECRET`과 `application.yml`의 `onlyoffice.secret` 값이 일치해야 함
+
+### 4. 저장 및 콜백 처리
+- SAVE 콜백 시 파일 다운로드 후 저장 및 버전 증가
+- FORCESAVE 콜백 시 저장하되 버전은 증가하지 않음
 
 ## 기술 스택
 
 ### Backend
-- **Java 21**
-- **Spring Boot 3.3.0**
-- **Gradle** - 빌드 도구
-- **ONLYOFFICE Java SDK 1.7.0** - Type-safe Config & Callback 처리
-- **JJWT 0.11.5** - JWT 인증
-- **Lombok** - 보일러플레이트 코드 제거
+- Java 21
+- Spring Boot 4.0.1
+- Gradle
+- ONLYOFFICE Java SDK 1.7.0
+- JJWT 0.13.0
+- PostgreSQL
+- MinIO 8.6.0
+- Hibernate 7 (Soft Delete)
 
 ### Frontend
-- **React 18.3.1**
-- **TypeScript 5.9.3**
-- **Vite 7.2.4** - 빌드 도구
-- **@onlyoffice/document-editor-react 2.1.1** - ONLYOFFICE React 컴포넌트
-- **Axios** - HTTP 클라이언트
+- Next.js 16.1.1 (App Router)
+- React 19.2.3
+- TypeScript 5.x
+- TanStack Query v5
+- Tailwind CSS v4 + shadcn/ui
+- Axios
+- @onlyoffice/document-editor-react 2.1.1
 
 ## 사전 요구사항
 
-1. **Java 21 이상**
-2. **Node.js 18 이상** 및 **pnpm**
-3. **Docker** (ONLYOFFICE Document Server 실행용)
+1. Java 21 이상
+2. Node.js 18 이상 및 pnpm
+3. Docker (ONLYOFFICE Document Server 및 인프라 실행용)
 
 ## 빠른 시작
 
 ### 1단계: 환경 변수 설정
 
-`.env.example` 파일을 복사하여 `.env` 파일을 생성합니다:
+`.env.example`을 복사하여 `.env` 생성:
 
 ```bash
 cp .env.example .env
 ```
 
-생성된 `.env` 파일을 편집하여 다음 항목을 설정합니다:
+필수 항목:
 
 ```env
-# PostgreSQL
 POSTGRES_DB=onlyoffice_demo
 POSTGRES_USER=demo
-POSTGRES_PASSWORD=your-secure-password-here  # 안전한 비밀번호로 변경
-
-# MinIO
+POSTGRES_PASSWORD=your-secure-password-here
 MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=your-minio-password-here  # 안전한 비밀번호로 변경
-
-# ONLYOFFICE JWT Secret (최소 32자)
-JWT_SECRET=your-secret-key-must-be-at-least-32-characters-long-for-hs256  # 강력한 비밀키로 변경
+MINIO_ROOT_PASSWORD=your-minio-password-here
+MINIO_ENDPOINT=http://localhost:9000
+MINIO_BUCKET=onlyoffice-documents
+JWT_SECRET=your-secret-key-must-be-at-least-32-characters-long-for-hs256
 ```
 
-강력한 비밀번호와 JWT Secret을 생성하려면:
-
-```bash
-# JWT Secret 생성 (64자리 16진수)
-openssl rand -hex 32
-
-# 또는 무작위 비밀번호 생성
-openssl rand -base64 16
-```
-
-### 2단계: ONLYOFFICE Document Server 및 인프라 실행
-
-프로젝트 루트에 포함된 `docker-compose.yml`을 사용하여 PostgreSQL, MinIO, ONLYOFFICE를 한 번에 실행할 수 있습니다.
+### 2단계: 인프라 실행
 
 ```bash
 docker-compose up -d
 ```
 
-모든 서비스가 정상적으로 시작되었는지 확인합니다:
+서비스 확인:
+- ONLYOFFICE: http://localhost:9980/welcome/
+- MinIO Console: http://localhost:9001
 
-```bash
-docker ps
-```
-
-다음 URL들에 접속하여 서비스 상태를 확인합니다:
-- ONLYOFFICE: `http://localhost:9980/welcome/`
-- MinIO Console: `http://localhost:9001` (User: minioadmin, Password: `.env`에 설정한 비밀번호)
-- PostgreSQL: 터미널에서 다음 명령어 실행
-
-```bash
-docker-compose exec postgres psql -U demo -d onlyoffice_demo -c "SELECT 1"
-```
-
-### 3단계: Backend 설정
-
-`backend/src/main/resources/application.yml` 파일을 확인하여 JWT Secret이 `.env` 파일과 일치하는지 확인합니다:
-
-```yaml
-onlyoffice:
-  url: http://localhost:9980
-  secret: your-secret-key-must-be-at-least-32-characters-long-for-hs256 # .env 파일의 JWT_SECRET 값과 일치해야 함
-```
-
-**중요**: Docker 환경에서 ONLYOFFICE가 Backend 콜백을 호출할 때 사용하는 URL:
-```yaml
-server:
-  baseUrl: http://host.docker.internal:8080  # Docker 환경용
-  # 또는
-  # baseUrl: http://localhost:8080  # 로컬 개발용
-```
-
-### 4단계: Backend 실행
+### 3단계: Backend 실행
 
 ```bash
 cd backend
 ./gradlew bootRun
 ```
 
-Backend가 `http://localhost:8080`에서 실행됩니다.
+Backend: http://localhost:8080
 
-### 5단계: Frontend 실행
-
-새 터미널을 열고:
+### 4단계: Frontend 실행
 
 ```bash
 cd frontend
@@ -181,235 +123,85 @@ pnpm install
 pnpm dev
 ```
 
-Frontend가 `http://localhost:3000`에서 실행됩니다.
+Frontend: http://localhost:3000
 
-### 6단계: 기존 파일 마이그레이션 (최초 1회)
+### 5단계: 문서 편집기 열기
 
-기존 `storage/` 디렉터리의 파일들을 데이터베이스에 등록합니다:
-
-```bash
-curl -X POST http://localhost:8080/api/admin/migration/files
-```
-
-마이그레이션 결과에서 각 파일의 fileKey(UUID)를 확인할 수 있습니다.
-
-### 7단계: 문서 편집기 열기
-
-브라우저에서 fileKey를 사용하여 접속합니다:
+`fileKey`를 사용해 에디터를 엽니다:
 
 ```
-http://localhost:3000?fileKey={마이그레이션에서 받은 UUID}
+http://localhost:3000/editor/{fileKey}
 ```
-
-**예제:**
-```
-http://localhost:3000?fileKey=550e8400-e29b-41d4-a716-446655440000
-```
-
-**fileKey 확인 방법:**
-- 마이그레이션 API 응답에서 확인
-- Backend 로그에서 확인
-- 또는 데이터베이스 직접 조회:
-  ```bash
-  docker-compose exec postgres psql -U demo -d onlyoffice_demo \
-    -c "SELECT file_key, file_name FROM documents WHERE deleted_at IS NULL;"
-  ```
 
 ## API 엔드포인트
 
-### Backend API
-
 | 메서드 | 엔드포인트 | 설명 |
 |--------|-----------|------|
-| `GET` | `/api/config?fileKey={uuid}` | ONLYOFFICE 에디터 설정 JSON 반환 (fileKey는 Document의 UUID) |
-| `GET` | `/files/{fileKey}` | 파일 다운로드 (ONLYOFFICE가 호출, fileKey는 UUID) |
-| `POST` | `/callback?fileKey={uuid}` | 편집 완료 시 ONLYOFFICE가 호출하는 콜백 |
-| `POST` | `/api/admin/migration/files` | 기존 storage/ 파일을 Document 레코드로 마이그레이션 (관리자용) |
-
-### 주요 흐름
-
-```mermaid
-sequenceDiagram
-    actor User as 사용자
-    participant Browser as 브라우저<br/>(React Frontend)
-    participant Backend as Spring Boot<br/>Backend
-    participant ONLYOFFICE as ONLYOFFICE<br/>Document Server
-    participant Storage as 파일 저장소<br/>(storage/)
-
-    User->>Browser: http://localhost:3000?fileKey={uuid} 접속
-    Browser->>Backend: GET /api/config?fileKey={uuid}
-    Backend->>Storage: fileKey로 파일 존재 확인
-    Storage-->>Backend: 파일 정보 반환
-    Backend->>Backend: 에디터 설정 JSON 생성<br/>(documentType, url, callbackUrl, JWT)
-    Backend-->>Browser: 설정 JSON 반환
-
-    Browser->>Browser: DocumentEditor 컴포넌트 렌더링
-    Browser->>ONLYOFFICE: 에디터 초기화 (config 전달)
-
-    ONLYOFFICE->>Backend: GET /files/{fileKey}
-    Backend->>Storage: fileKey로 파일 읽기
-    Storage-->>Backend: 파일 데이터
-    Backend-->>ONLYOFFICE: 파일 전송
-
-    ONLYOFFICE-->>User: 에디터 UI 표시
-    User->>ONLYOFFICE: 문서 편집
-
-    User->>ONLYOFFICE: 완료 (에디터 종료 또는 Force Save)
-    ONLYOFFICE->>Backend: POST /callback?fileKey={uuid}<br/>(status=2, downloadUrl)
-    Backend->>ONLYOFFICE: 편집된 파일 다운로드 (downloadUrl)
-    ONLYOFFICE-->>Backend: 파일 데이터
-    Backend->>Storage: 파일 저장 (덮어쓰기)
-    Backend-->>ONLYOFFICE: {error: 0} (성공)
-```
+| GET | /api/documents | 문서 목록 조회 |
+| POST | /api/documents/upload | 문서 업로드 |
+| DELETE | /api/documents/{fileKey} | 문서 삭제 (Soft Delete) |
+| GET | /api/documents/{fileKey}/config | ONLYOFFICE 에디터 설정 조회 |
+| GET | /files/{fileKey} | ONLYOFFICE가 호출하는 파일 다운로드 |
+| POST | /callback?fileKey={uuid} | ONLYOFFICE 콜백 처리 |
+| POST | /api/admin/migration/files | 기존 스토리지 파일 마이그레이션 |
+| GET | /api/config?fileKey={uuid} | 레거시 에디터 설정 엔드포인트 |
 
 ## 설정 파일
 
 ### Backend: application.yml
 
 ```yaml
-# Backend 기본 URL (ONLYOFFICE가 콜백을 호출할 주소)
 server:
   baseUrl: http://host.docker.internal:8080
 
-# ONLYOFFICE Document Server 설정
 onlyoffice:
   url: http://localhost:9980
-  secret: your-secret-key-must-be-at-least-32-characters-long-for-hs256
+  secret: ${JWT_SECRET:your-secret-key-must-be-at-least-32-characters-long-for-hs256}
+  jwt:
+    expiration-hours: 1
 
-# 파일 저장소 설정
 storage:
-  path: storage
+  path: backend/storage
+
+minio:
+  endpoint: http://localhost:9000
+  accessKey: minioadmin
+  secretKey: your-minio-password-here
+  bucket: onlyoffice-documents
+  presigned-url-expiry: 3600
 ```
 
-**주요 설정 항목:**
-
-- `server.baseUrl`: ONLYOFFICE Document Server가 Backend에 접근할 때 사용하는 URL
-  - Docker 환경: `http://host.docker.internal:8080`
-  - 동일 네트워크: `http://localhost:8080` 또는 실제 IP
-
-- `onlyoffice.url`: ONLYOFFICE Document Server 주소
-
-- `onlyoffice.secret`: JWT 서명에 사용할 비밀키 (최소 32자)
-
-- `storage.path`: 문서 파일이 저장된 디렉터리 경로 (backend 디렉터리 기준 상대 경로, `storage`는 `backend/storage/`를 의미)
-
-### Frontend: vite.config.ts
+### Frontend: next.config.ts
 
 ```typescript
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      }
-    }
-  }
-})
+const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
+
+const nextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${backendUrl}/api/:path*`,
+      },
+    ];
+  },
+};
 ```
 
-## 보안
+## 파일 식별 및 저장 방식
 
-### 현재 보안 상태
-- ✅ **JWT 적용됨**: `docker-compose.yml`을 통해 JWT가 활성화되어 실행됩니다.
-- **Secret Key 관리**: `.env` 파일에서 `JWT_SECRET` 환경 변수로 관리됩니다.
-
-### JWT Secret 관리 (필수)
-1. `.env` 파일에서 `JWT_SECRET` 값 설정 (최소 32자)
-2. Backend `application.yml`의 `onlyoffice.secret`이 `.env`의 `JWT_SECRET` 값과 일치하도록 설정
-
-3. JWT 사양:
-   - **알고리즘**: HS256 (HMAC with SHA-256)
-   - **서명 대상**: 전체 에디터 설정 객체
-   - **검증**: ONLYOFFICE Document Server가 자동으로 수행
-
-### 프로덕션 환경 주의사항
-- JWT 활성화 필수
-- `onlyoffice.secret`을 환경 변수로 관리
-- 강력한 랜덤 값 사용 (최소 32바이트)
-- HTTPS 사용 권장
-- CORS 설정 검토
-- Callback 요청에 대한 JWT 검증 추가 고려
-
-## 트러블슈팅
-
-### ONLYOFFICE 에디터가 로드되지 않음
-
-1. Docker 컨테이너 상태 확인:
-   ```bash
-   docker ps
-   ```
-
-2. ONLYOFFICE 웰컴 페이지 접속:
-   ```
-   http://localhost:9980/welcome/
-   ```
-
-3. Backend 로그에서 에러 확인
-
-### 파일을 찾을 수 없음 (404)
-
-1. `backend/storage/` 폴더에 파일이 있는지 확인:
-   ```bash
-   ls backend/storage/
-   ```
-
-2. `application.yml`의 `storage.path` 설정 확인:
-   ```yaml
-   storage:
-     path: storage  # backend 디렉터리 기준 상대 경로
-   ```
-
-3. Backend 시작 시 로그 확인:
-   ```
-   Storage directory initialized at: /path/to/onlyoffice-demo/backend/storage
-   ```
-
-### 콜백 저장 실패
-
-1. `server.baseUrl` 설정 확인:
-   - Docker 환경: `http://host.docker.internal:8080`
-   - 실제 IP 사용 가능 여부 확인
-
-2. Backend 로그에서 CallbackController 에러 확인
-
-3. ONLYOFFICE가 Backend에 네트워크 접근 가능한지 확인
-
-
-## 개발 노트
-
-### 파일 저장소 구조
-- **파일 위치**: `backend/storage/` (backend 디렉터리 내부)
-- **저장 방식**: 파일시스템 직접 접근 (상대 경로)
-- **편집 파일**: 동일 디렉터리에 저장 (덮어쓰기)
-
-
-### 문서 타입 자동 감지
-EditorController는 파일 확장자를 기반으로 documentType을 자동으로 매핑합니다:
-- `word`: docx, doc, odt, txt, rtf, pdf 등
-- `cell`: xlsx, xls, ods, csv 등
-- `slide`: pptx, ppt, odp 등
-
-### PDF 읽기 전용 모드
-PDF 파일은 자동으로 `edit: false`로 설정되어 읽기 전용 모드로 열립니다.
-
-## 라이선스
-
-이 프로젝트는 데모 및 학습 목적으로 제공됩니다.
-
-실제 서비스에 적용 시 ONLYOFFICE의 라이선스 정책을 확인하세요:
-- Community Edition: AGPLv3
-- Enterprise Edition: 상용 라이선스
+- `fileKey`: UUID 기반 문서 식별자
+- `editorKey`: `{fileKey}_v{version}` 형식
+- MinIO 저장 경로: `documents/{fileKey}/{fileName}`
+- 레거시 로컬 스토리지 마이그레이션용 디렉터리: `storage.path`
 
 ## 문서
 
-- [OnlyOffice 통합 가이드](docs/onlyoffice-integration-guide.md) - document.key 관리, callback 처리 등 기술 상세
-- [Document Service Saga 패턴](docs/document-service-saga-pattern.md) - 문서 업로드/삭제 분산 트랜잭션 및 보상 전략
+- docs/onlyoffice-integration-guide.md
+- docs/document-service-saga-pattern.md
 
 ## 참고 자료
 
-- [ONLYOFFICE API Documentation](https://api.onlyoffice.com/editors/basic)
-- [ONLYOFFICE Document Server](https://github.com/ONLYOFFICE/DocumentServer)
-- [Spring Boot Documentation](https://spring.io/projects/spring-boot)
-- [React Documentation](https://react.dev)
+- https://api.onlyoffice.com/editors/basic
+- https://github.com/ONLYOFFICE/DocumentServer
+- https://github.com/ONLYOFFICE/docs-integration-sdk-java

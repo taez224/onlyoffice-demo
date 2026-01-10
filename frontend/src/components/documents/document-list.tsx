@@ -1,34 +1,43 @@
 'use client';
 
+import { useCallback } from 'react';
 import type { SortingState, OnChangeFn } from '@tanstack/react-table';
+import { useDocumentsSuspense } from '@/hooks/use-documents';
 import { DocumentTable } from './document-table';
-import type { DocumentResponse } from '@/types/document';
 
 interface DocumentListProps {
-  documents: DocumentResponse[];
-  selectedIds: string[];
+  selectedFileKeys: string[];
   sorting: SortingState;
   onSortingChange: OnChangeFn<SortingState>;
   onToggleSelection: (fileKey: string) => void;
-  onToggleAll: () => void;
+  setSelectedFileKeys: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 export function DocumentList({
-  documents,
-  selectedIds,
+  selectedFileKeys,
   sorting,
   onSortingChange,
   onToggleSelection,
-  onToggleAll,
+  setSelectedFileKeys,
 }: DocumentListProps) {
+  const { data: documents } = useDocumentsSuspense();
+
+  const toggleAll = useCallback(() => {
+    if (selectedFileKeys.length === documents.length) {
+      setSelectedFileKeys([]);
+    } else {
+      setSelectedFileKeys(documents.map((d) => d.fileKey));
+    }
+  }, [selectedFileKeys.length, documents, setSelectedFileKeys]);
+
   return (
     <DocumentTable
       documents={documents}
-      selectedIds={selectedIds}
+      selectedFileKeys={selectedFileKeys}
       sorting={sorting}
       onSortingChange={onSortingChange}
       onToggleSelection={onToggleSelection}
-      onToggleAll={onToggleAll}
+      onToggleAll={toggleAll}
     />
   );
 }
