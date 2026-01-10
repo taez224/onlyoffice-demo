@@ -22,7 +22,8 @@ Next.js rewrites `/api` to `http://localhost:8080` via `next.config.ts`; adjust 
 - `src/app/page.tsx` - Document list entry (Server Component, renders DocumentsPage)
 - `src/app/editor/[fileKey]/page.tsx` - Editor page (/editor/[fileKey])
 - `src/components/documents/` - Document list components (Streaming SSR)
-  - `documents-page.tsx` - Main client component with Suspense boundary and useSuspenseQuery
+  - `documents-page.tsx` - Main client component with Suspense boundary
+  - `document-list.tsx` - Uses useSuspenseQuery for data fetching + toggleAll logic
   - `document-table.tsx` - TanStack Table with sorting
   - `table-skeleton.tsx` - Suspense fallback skeleton UI
   - `documents-error-boundary.tsx` - Error boundary with retry

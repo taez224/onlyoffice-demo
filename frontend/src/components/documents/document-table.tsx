@@ -125,18 +125,15 @@ function SelectCheckbox({
   onToggle: (fileKey: string) => void;
 }) {
   return (
-    <div
-      className="flex items-center justify-center h-full w-full py-3"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle(row.original.fileKey);
-      }}
-    >
+    <div className="flex items-center justify-center h-full w-full py-3">
       <input
         type="checkbox"
         className="accent-primary w-4 h-4 cursor-pointer"
         checked={selectedFileKeys.includes(row.original.fileKey)}
-        onChange={() => onToggle(row.original.fileKey)}
+        onChange={(e) => {
+          e.stopPropagation();
+          onToggle(row.original.fileKey);
+        }}
         onClick={(e) => e.stopPropagation()}
       />
     </div>
