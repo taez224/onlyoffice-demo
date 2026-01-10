@@ -117,11 +117,11 @@ function SortableHeader({
 
 function SelectCheckbox({
   row,
-  selectedIds,
+  selectedFileKeys,
   onToggle,
 }: {
   row: Row<DocumentResponse>;
-  selectedIds: string[];
+  selectedFileKeys: string[];
   onToggle: (fileKey: string) => void;
 }) {
   return (
@@ -135,7 +135,7 @@ function SelectCheckbox({
       <input
         type="checkbox"
         className="accent-primary w-4 h-4 cursor-pointer"
-        checked={selectedIds.includes(row.original.fileKey)}
+        checked={selectedFileKeys.includes(row.original.fileKey)}
         onChange={() => onToggle(row.original.fileKey)}
         onClick={(e) => e.stopPropagation()}
       />
@@ -145,11 +145,11 @@ function SelectCheckbox({
 
 function SelectAllCheckbox({
   documents,
-  selectedIds,
+  selectedFileKeys,
   onToggleAll,
 }: {
   documents: DocumentResponse[];
-  selectedIds: string[];
+  selectedFileKeys: string[];
   onToggleAll: () => void;
 }) {
   return (
@@ -157,7 +157,7 @@ function SelectAllCheckbox({
       <input
         type="checkbox"
         className="accent-primary w-4 h-4 cursor-pointer"
-        checked={selectedIds.length === documents.length && documents.length > 0}
+        checked={selectedFileKeys.length === documents.length && documents.length > 0}
         onChange={onToggleAll}
       />
     </div>
@@ -243,7 +243,7 @@ const columns: ColumnDef<DocumentResponse>[] = [
 
 interface DocumentTableProps {
   documents: DocumentResponse[];
-  selectedIds: string[];
+  selectedFileKeys: string[];
   sorting: SortingState;
   onSortingChange: OnChangeFn<SortingState>;
   onToggleSelection: (fileKey: string) => void;
@@ -252,7 +252,7 @@ interface DocumentTableProps {
 
 export function DocumentTable({
   documents,
-  selectedIds,
+  selectedFileKeys,
   sorting,
   onSortingChange,
   onToggleSelection,
@@ -291,7 +291,7 @@ export function DocumentTable({
                     {header.id === 'select' ? (
                       <SelectAllCheckbox
                         documents={documents}
-                        selectedIds={selectedIds}
+                        selectedFileKeys={selectedFileKeys}
                         onToggleAll={onToggleAll}
                       />
                     ) : header.isPlaceholder ? null : (
@@ -309,7 +309,7 @@ export function DocumentTable({
               <TableRow
                 key={row.id}
                 className={`border-border hover:bg-muted/50 transition-colors cursor-pointer group h-14 ${
-                  selectedIds.includes(row.original.fileKey) ? 'bg-muted/40' : ''
+                  selectedFileKeys.includes(row.original.fileKey) ? 'bg-muted/40' : ''
                 }`}
                 onClick={() => onToggleSelection(row.original.fileKey)}
               >
@@ -331,7 +331,7 @@ export function DocumentTable({
                       {cell.column.id === 'select' ? (
                         <SelectCheckbox
                           row={row}
-                          selectedIds={selectedIds}
+                          selectedFileKeys={selectedFileKeys}
                           onToggle={onToggleSelection}
                         />
                       ) : (

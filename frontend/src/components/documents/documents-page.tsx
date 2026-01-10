@@ -1,19 +1,18 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import type { SortingState, OnChangeFn } from '@tanstack/react-table';
+import type { SortingState } from '@tanstack/react-table';
 import { useUploadDocument } from '@/hooks/use-upload-document';
 import { useDeleteDocuments } from '@/hooks/use-delete-documents';
-import { useDocumentsSuspense } from '@/hooks/use-documents';
 import { DocumentsErrorBoundary } from './documents-error-boundary';
-import { DocumentTable } from './document-table';
+import { DocumentList } from './document-list';
 import { TableSkeleton } from './table-skeleton';
 import { BulkActionBar } from './bulk-action-bar';
 import { DeleteConfirmDialog } from './delete-confirm-dialog';
 import { UploadButton } from './upload-button';
 
 export function DocumentsPage() {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedFileKeys, setSelectedFileKeys] = useState<string[]>([]);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -21,7 +20,7 @@ export function DocumentsPage() {
   const deleteDocumentsMutation = useDeleteDocuments();
 
   const toggleSelection = (fileKey: string) => {
-    setSelectedIds((prev) =>
+    setSelectedFileKeys((prev) =>
       prev.includes(fileKey) ? prev.filter((id) => id !== fileKey) : [...prev, fileKey]
     );
   };
@@ -29,13 +28,13 @@ export function DocumentsPage() {
 
 
   const handleDeleteClick = () => {
-    if (selectedIds.length === 0) return;
+    if (selectedFileKeys.length === 0) return;
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = () => {
-    deleteDocumentsMutation.mutate(selectedIds);
-    setSelectedIds([]);
+    deleteDocumentsMutation.mutate(selectedFileKeys);
+    setSelectedFileKeys([]);
     setDeleteDialogOpen(false);
   };
 
@@ -61,12 +60,12 @@ export function DocumentsPage() {
         <div className="tech-border bg-card flex-1 flex flex-col overflow-x-auto relative">
           <DocumentsErrorBoundary>
             <Suspense fallback={<TableSkeleton />}>
-              <DocumentListWithToggleAll
-                selectedIds={selectedIds}
+              <DocumentList
+                selectedFileKeys={selectedFileKeys}
                 sorting={sorting}
                 onSortingChange={setSorting}
                 onToggleSelection={toggleSelection}
-                setSelectedIds={setSelectedIds}
+                setSelectedFileKeys={setSelectedFileKeys}
               />
             </Suspense>
           </DocumentsErrorBoundary>
@@ -74,55 +73,18 @@ export function DocumentsPage() {
       </div>
 
       <BulkActionBar
-        selectedCount={selectedIds.length}
+        selectedCount={selectedFileKeys.length}
         isDeleting={deleteDocumentsMutation.isPending}
         onDelete={handleDeleteClick}
-        onClear={() => setSelectedIds([])}
+        onClear={() => setSelectedFileKeys([])}
       />
 
       <DeleteConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        selectedCount={selectedIds.length}
+        selectedCount={selectedFileKeys.length}
         onConfirm={handleDeleteConfirm}
       />
     </div>
-  );
-}
-
-interface DocumentListWithToggleAllProps {
-  selectedIds: string[];
-  sorting: SortingState;
-  onSortingChange: OnChangeFn<SortingState>;
-  onToggleSelection: (fileKey: string) => void;
-  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
-}
-
-function DocumentListWithToggleAll({
-  selectedIds,
-  sorting,
-  onSortingChange,
-  onToggleSelection,
-  setSelectedIds,
-}: DocumentListWithToggleAllProps) {
-  const { data: documents } = useDocumentsSuspense();
-
-  const toggleAll = () => {
-    if (selectedIds.length === documents.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(documents.map((d) => d.fileKey));
-    }
-  };
-
-  return (
-    <DocumentTable
-      documents={documents}
-      selectedIds={selectedIds}
-      sorting={sorting}
-      onSortingChange={onSortingChange}
-      onToggleSelection={onToggleSelection}
-      onToggleAll={toggleAll}
-    />
   );
 }
