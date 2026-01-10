@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import type { SortingState, OnChangeFn } from '@tanstack/react-table';
 import { useDocumentsSuspense } from '@/hooks/use-documents';
 import { DocumentTable } from './document-table';
@@ -21,13 +22,13 @@ export function DocumentList({
 }: DocumentListProps) {
   const { data: documents } = useDocumentsSuspense();
 
-  const toggleAll = () => {
+  const toggleAll = useCallback(() => {
     if (selectedFileKeys.length === documents.length) {
       setSelectedFileKeys([]);
     } else {
       setSelectedFileKeys(documents.map((d) => d.fileKey));
     }
-  };
+  }, [selectedFileKeys.length, documents, setSelectedFileKeys]);
 
   return (
     <DocumentTable

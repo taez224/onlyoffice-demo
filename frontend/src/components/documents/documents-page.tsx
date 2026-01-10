@@ -25,8 +25,6 @@ export function DocumentsPage() {
     );
   };
 
-
-
   const handleDeleteClick = () => {
     if (selectedFileKeys.length === 0) return;
     setDeleteDialogOpen(true);
