@@ -242,6 +242,37 @@ function EditorContent({ fileKey }) {
 
 `useId()`는 React 18에서 도입된 Hook으로, SSR 환경에서도 서버/클라이언트 간 일관된 ID를 보장합니다.
 
+### 주의: useSuspenseQuery는 enabled 옵션을 무시함
+
+`useSuspenseQuery`는 `useQuery`와 달리 `enabled` 옵션을 **무시**합니다. 항상 즉시 실행됩니다.
+
+```tsx
+// useQuery - enabled가 false면 실행 안 됨
+const { data } = useQuery({
+  queryFn: () => fetchData(id),
+  enabled: Boolean(id),  // id가 없으면 skip
+});
+
+// useSuspenseQuery - enabled 무시, 항상 실행!
+const { data } = useSuspenseQuery({
+  queryFn: () => fetchData(id),
+  enabled: Boolean(id),  // ⚠️ 이 옵션은 무시됨!
+});
+```
+
+**해결책**: Hook 내부에서 명시적으로 검증
+
+```tsx
+export function useEditorConfigSuspense(fileKey: string) {
+  if (!fileKey) {
+    throw new Error('fileKey is required for useEditorConfigSuspense');
+  }
+  return useSuspenseQuery(editorConfigQueryOptions(fileKey));
+}
+```
+
+이렇게 하면 개발 단계에서 빈 값 전달을 바로 발견할 수 있습니다.
+
 ### SSR 환경에서 피해야 할 패턴
 
 | 패턴 | 문제 | 해결책 |
