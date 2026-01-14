@@ -7,6 +7,8 @@ import com.example.onlyoffice.exception.DocumentNotFoundException;
 import com.example.onlyoffice.exception.DocumentUploadException;
 import com.example.onlyoffice.repository.DocumentRepository;
 import com.example.onlyoffice.util.KeyUtils;
+import com.onlyoffice.manager.document.DocumentManager;
+import com.onlyoffice.model.documenteditor.config.document.DocumentType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
@@ -30,10 +32,17 @@ public class DocumentService {
     private static final String DEFAULT_UPLOADER = "anonymous";
     private static final Sort ACTIVE_DOCUMENT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
+    /**
+     * ONLYOFFICE Document Server는 60초 내 응답을 기대함.
+     * 5초 버퍼를 추가하여 네트워크 지연 및 파일 다운로드 시간 허용.
+     */
+    private static final int CALLBACK_TRANSACTION_TIMEOUT_SECONDS = 65;
+
     private final DocumentRepository documentRepository;
     private final FileSecurityService fileSecurityService;
     private final MinioStorageService storageService;
     private final UrlDownloadService urlDownloadService;
+    private final DocumentManager documentManager;
 
     @Transactional(readOnly = true)
     public Optional<Document> findByFileKey(String fileKey) {
@@ -63,7 +72,7 @@ public class DocumentService {
 
         String sanitizedFilename = fileSecurityService.sanitizeFilename(originalFilename);
         String extension = extractExtension(sanitizedFilename);
-        String documentType = determineDocumentType(extension);
+        String documentType = determineDocumentType(sanitizedFilename);
         String fileKey = KeyUtils.generateFileKey();
         String storagePath = buildStoragePath(fileKey, sanitizedFilename);
 
@@ -114,8 +123,7 @@ public class DocumentService {
 
     @Transactional(readOnly = true)
     public String getEditorKeyByFileKey(String fileKey) {
-        Document document = getDocumentOrThrow(fileKey);
-        return KeyUtils.generateEditorKey(document.getFileKey(), document.getEditorVersion());
+        return documentManager.getDocumentKey(fileKey, false);
     }
 
     @Transactional(readOnly = true)
@@ -124,10 +132,9 @@ public class DocumentService {
         return storageService.downloadFile(document.getStoragePath());
     }
 
-    @Transactional(timeout = 65)
+    @Transactional(timeout = CALLBACK_TRANSACTION_TIMEOUT_SECONDS)
     public void processCallbackSave(String downloadUrl, String fileKey) {
-        Document document = documentRepository.findWithLockByFileKey(fileKey)
-                .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
+        Document document = getDocumentWithLockOrThrow(fileKey);
 
         log.info("Processing SAVE callback with lock for fileKey: {}", fileKey);
 
@@ -141,10 +148,9 @@ public class DocumentService {
                 fileKey, oldVersion, document.getEditorVersion());
     }
 
-    @Transactional(timeout = 65)
+    @Transactional(timeout = CALLBACK_TRANSACTION_TIMEOUT_SECONDS)
     public void processCallbackForceSave(String downloadUrl, String fileKey) {
-        Document document = documentRepository.findWithLockByFileKey(fileKey)
-                .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
+        Document document = getDocumentWithLockOrThrow(fileKey);
 
         log.info("Processing FORCESAVE callback with lock for fileKey: {}", fileKey);
 
@@ -187,6 +193,11 @@ public class DocumentService {
                 .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
     }
 
+    private Document getDocumentWithLockOrThrow(String fileKey) {
+        return documentRepository.findWithLockByFileKey(fileKey)
+                .orElseThrow(() -> new DocumentNotFoundException("Document not found for fileKey: " + fileKey));
+    }
+
     private String extractExtension(String filename) {
         int dotIndex = filename.lastIndexOf('.');
         if (dotIndex == -1) {
@@ -195,14 +206,19 @@ public class DocumentService {
         return filename.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
     }
 
-    private String determineDocumentType(String extension) {
-        return switch (extension) {
-            case "docx", "doc", "odt", "txt", "hwp" -> "word";
-            case "xlsx", "xls", "xlsm", "ods", "csv" -> "cell";
-            case "pptx", "ppt", "odp" -> "slide";
-            case "pdf" -> "pdf";
-            default -> "word";
-        };
+    /**
+     * SDK의 포맷 데이터베이스를 활용하여 문서 타입 결정.
+     * 지원하지 않는 확장자는 FileSecurityService에서 이미 검증되었으므로
+     * 여기서 null이 반환되면 프로그래밍 오류임.
+     */
+    private String determineDocumentType(String fileName) {
+        DocumentType type = documentManager.getDocumentType(fileName);
+        if (type == null) {
+            throw new IllegalArgumentException(
+                    "Unsupported file type: " + fileName + " (should have been validated by FileSecurityService)"
+            );
+        }
+        return type.name().toLowerCase(Locale.ROOT);
     }
 
     private String buildStoragePath(String fileKey, String sanitizedFilename) {

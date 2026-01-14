@@ -1,10 +1,17 @@
 package com.example.onlyoffice.service;
 
 import com.example.onlyoffice.exception.SecurityValidationException;
+import com.onlyoffice.manager.document.DocumentManager;
+import com.onlyoffice.model.documenteditor.config.document.DocumentType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.ByteArrayOutputStream;
@@ -13,15 +20,29 @@ import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.endsWith;
+import static org.mockito.Mockito.when;
 
 @DisplayName("FileSecurityService")
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class FileSecurityServiceTest {
+
+    @Mock
+    private DocumentManager documentManager;
 
     private FileSecurityService fileSecurityService;
 
     @BeforeEach
-    void setUp() throws Exception {
-        fileSecurityService = new FileSecurityService();
+    void setUp() {
+        // Configure DocumentManager mock for supported extensions
+        when(documentManager.getDocumentType(endsWith(".docx"))).thenReturn(DocumentType.WORD);
+        when(documentManager.getDocumentType(endsWith(".xlsx"))).thenReturn(DocumentType.CELL);
+        when(documentManager.getDocumentType(endsWith(".pptx"))).thenReturn(DocumentType.SLIDE);
+        when(documentManager.getDocumentType(endsWith(".pdf"))).thenReturn(DocumentType.PDF);
+
+        fileSecurityService = new FileSecurityService(documentManager);
     }
 
     @Nested

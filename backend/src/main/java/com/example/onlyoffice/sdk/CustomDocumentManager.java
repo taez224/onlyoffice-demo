@@ -1,7 +1,9 @@
 package com.example.onlyoffice.sdk;
 
 import com.example.onlyoffice.entity.Document;
-import com.example.onlyoffice.service.DocumentService;
+import com.example.onlyoffice.exception.DocumentNotFoundException;
+import com.example.onlyoffice.repository.DocumentRepository;
+import com.example.onlyoffice.util.KeyUtils;
 import com.onlyoffice.manager.document.DefaultDocumentManager;
 import com.onlyoffice.manager.settings.SettingsManager;
 import lombok.extern.slf4j.Slf4j;
@@ -26,27 +28,29 @@ import org.springframework.stereotype.Component;
 @Component
 public class CustomDocumentManager extends DefaultDocumentManager {
 
-    private final DocumentService documentService;
+    private final DocumentRepository documentRepository;
 
     public CustomDocumentManager(SettingsManager settingsManager,
-                                 DocumentService documentService) {
+                                 DocumentRepository documentRepository) {
         super(settingsManager);
-        this.documentService = documentService;
+        this.documentRepository = documentRepository;
     }
 
     @Override
     public String getDocumentKey(String fileId, boolean embedded) {
         // fileId is now fileKey (UUID)
         // Look up Document and return fileKey_v{version} format
-        return documentService.getEditorKeyByFileKey(fileId);
+        return documentRepository.findByFileKey(fileId)
+                .map(doc -> KeyUtils.generateEditorKey(doc.getFileKey(), doc.getEditorVersion()))
+                .orElseThrow(() -> new DocumentNotFoundException("fileKey: " + fileId));
     }
 
     @Override
     public String getDocumentName(String fileId) {
         // fileId is now fileKey (UUID)
         // Return original fileName from Document
-        return documentService.findByFileKey(fileId)
+        return documentRepository.findByFileKey(fileId)
                 .map(Document::getFileName)
-                .orElse(fileId); // fallback to fileId if not found
+                .orElseThrow(() -> new DocumentNotFoundException("fileKey: " + fileId));
     }
 }

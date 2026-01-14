@@ -1,6 +1,7 @@
 package com.example.onlyoffice.service;
 
 import com.example.onlyoffice.exception.SecurityValidationException;
+import com.onlyoffice.manager.document.DocumentManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.config.TikaConfig;
 import org.apache.tika.detect.Detector;
@@ -68,13 +69,6 @@ public class FileSecurityService {
     private static final long MAX_UNCOMPRESSED_SIZE = 1024 * 1024 * 1024L; // 1GB
 
     /**
-     * 허용된 파일 확장자
-     */
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-            "docx", "xlsx", "pptx", "pdf"
-    );
-
-    /**
      * 확장자별 허용 MIME 타입 매핑
      */
     private static final Map<String, Set<String>> EXTENSION_MIME_MAP = Map.of(
@@ -97,10 +91,16 @@ public class FileSecurityService {
 
     private final TikaConfig tikaConfig;
     private final Detector detector;
+    private final DocumentManager documentManager;
 
-    public FileSecurityService() throws Exception {
-        this.tikaConfig = new TikaConfig();
-        this.detector = tikaConfig.getDetector();
+    public FileSecurityService(DocumentManager documentManager) {
+        try {
+            this.tikaConfig = new TikaConfig();
+            this.detector = tikaConfig.getDetector();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to initialize Apache Tika", e);
+        }
+        this.documentManager = documentManager;
     }
 
     /**
@@ -126,9 +126,9 @@ public class FileSecurityService {
         // 1. 파일명 새니타이징 및 검증
         String sanitizedFilename = sanitizeFilename(originalFilename);
 
-        // 2. 확장자 검증
+        // 2. 확장자 검증 (ONLYOFFICE SDK 활용)
         String extension = getFileExtension(sanitizedFilename);
-        validateExtension(extension);
+        validateExtension(sanitizedFilename);
 
         // 3. 파일 크기 검증
         validateFileSize(file.getSize());
@@ -237,13 +237,15 @@ public class FileSecurityService {
     }
 
     /**
-     * 확장자 검증
+     * 확장자 검증 - ONLYOFFICE SDK를 사용하여 지원되는 파일 형식인지 확인
+     *
+     * @param filename 검증할 파일명 (확장자 포함)
      */
-    private void validateExtension(String extension) {
-        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+    private void validateExtension(String filename) {
+        if (documentManager.getDocumentType(filename) == null) {
+            String extension = getFileExtension(filename);
             throw new SecurityValidationException(
-                    String.format("허용되지 않은 파일 형식입니다. 허용 형식: %s (입력: %s)",
-                            ALLOWED_EXTENSIONS, extension)
+                    String.format("허용되지 않은 파일 형식입니다: %s", extension)
             );
         }
     }

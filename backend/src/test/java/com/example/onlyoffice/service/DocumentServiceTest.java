@@ -5,6 +5,8 @@ import com.example.onlyoffice.entity.DocumentStatus;
 import com.example.onlyoffice.exception.DocumentDeleteException;
 import com.example.onlyoffice.exception.DocumentUploadException;
 import com.example.onlyoffice.repository.DocumentRepository;
+import com.onlyoffice.manager.document.DocumentManager;
+import com.onlyoffice.model.documenteditor.config.document.DocumentType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("DocumentService Saga 단위 테스트")
@@ -45,13 +48,21 @@ class DocumentServiceTest {
     private UrlDownloadService urlDownloadService;
 
     @Mock
+    private DocumentManager documentManager;
+
+    @Mock
     private MultipartFile multipartFile;
 
     private DocumentService documentService;
 
     @BeforeEach
     void setUp() {
-        documentService = new DocumentService(documentRepository, fileSecurityService, storageService, urlDownloadService);
+        documentService = new DocumentService(documentRepository, fileSecurityService, storageService, urlDownloadService, documentManager);
+        // DocumentManager mock: .docx -> WORD, .xlsx -> CELL, .pptx -> SLIDE, .pdf -> PDF
+        lenient().when(documentManager.getDocumentType(argThat(name -> name != null && name.endsWith(".docx")))).thenReturn(DocumentType.WORD);
+        lenient().when(documentManager.getDocumentType(argThat(name -> name != null && name.endsWith(".xlsx")))).thenReturn(DocumentType.CELL);
+        lenient().when(documentManager.getDocumentType(argThat(name -> name != null && name.endsWith(".pptx")))).thenReturn(DocumentType.SLIDE);
+        lenient().when(documentManager.getDocumentType(argThat(name -> name != null && name.endsWith(".pdf")))).thenReturn(DocumentType.PDF);
     }
 
     @Test
@@ -225,10 +236,8 @@ class DocumentServiceTest {
     @Test
     @DisplayName("getEditorKeyByFileKey - 에디터 키 생성 성공")
     void getEditorKeyByFileKey_returnsEditorKey() {
-        Document document = buildDocument();
-        document.setEditorVersion(3);
-        when(documentRepository.findByFileKey("file-key"))
-                .thenReturn(Optional.of(document));
+        when(documentManager.getDocumentKey("file-key", false))
+                .thenReturn("file-key_v3");
 
         String editorKey = documentService.getEditorKeyByFileKey("file-key");
 
@@ -256,23 +265,16 @@ class DocumentServiceTest {
     }
 
     @Test
-    @DisplayName("파일명이 없는 파일 업로드 시 기본 파일명 사용")
-    void uploadDocument_usesDefaultFilenameWhenOriginalIsNull() {
+    @DisplayName("파일명이 없는 파일 업로드 시 확장자가 없으면 예외 발생")
+    void uploadDocument_throwsExceptionWhenFilenameHasNoExtension() {
         when(multipartFile.isEmpty()).thenReturn(false);
         when(multipartFile.getOriginalFilename()).thenReturn(null);
-        when(multipartFile.getSize()).thenReturn(1_024L);
         when(fileSecurityService.sanitizeFilename("document")).thenReturn("document");
-        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> {
-            Document doc = invocation.getArgument(0);
-            if (doc.getId() == null) {
-                doc.setId(1L);
-            }
-            return doc;
-        });
+        // "document" has no extension, so getDocumentType returns null (default mock behavior)
 
-        Document result = documentService.uploadDocument(multipartFile);
-
-        assertThat(result.getFileName()).isEqualTo("document");
+        assertThatThrownBy(() -> documentService.uploadDocument(multipartFile))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported file type");
     }
 
     @Test
