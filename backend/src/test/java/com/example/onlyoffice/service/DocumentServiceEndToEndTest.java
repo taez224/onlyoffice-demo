@@ -3,6 +3,7 @@ package com.example.onlyoffice.service;
 import com.example.onlyoffice.entity.Document;
 import com.example.onlyoffice.entity.DocumentStatus;
 import com.example.onlyoffice.repository.DocumentRepository;
+import com.onlyoffice.manager.document.DocumentManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,13 +46,16 @@ class DocumentServiceEndToEndTest {
     @Mock
     private UrlDownloadService urlDownloadService;
 
+    @Mock
+    private DocumentManager documentManager;
+
     private DocumentService documentService;
 
     private Document testDocument;
 
     @BeforeEach
     void setUp() {
-        documentService = new DocumentService(documentRepository, fileSecurityService, storageService, urlDownloadService);
+        documentService = new DocumentService(documentRepository, fileSecurityService, storageService, urlDownloadService, documentManager);
 
         doNothing().when(storageService).deleteFile(anyString());
 

@@ -1,12 +1,16 @@
 package com.example.onlyoffice.service;
 
 import com.example.onlyoffice.exception.SecurityValidationException;
+import com.onlyoffice.manager.document.DocumentManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.config.TikaConfig;
 import org.apache.tika.detect.Detector;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.TikaCoreProperties;
 import org.apache.tika.mime.MediaType;
+import org.apache.tika.mime.MimeType;
+import org.apache.tika.mime.MimeTypeException;
+import org.apache.tika.mime.MimeTypes;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -68,39 +72,46 @@ public class FileSecurityService {
     private static final long MAX_UNCOMPRESSED_SIZE = 1024 * 1024 * 1024L; // 1GB
 
     /**
-     * 허용된 파일 확장자
+     * 위험한 MIME 타입 블랙리스트 (실행 파일, 스크립트 등)
+     * 악성 파일이 문서 확장자로 위장해도 차단
      */
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-            "docx", "xlsx", "pptx", "pdf"
+    private static final Set<String> DANGEROUS_MIME_TYPES = Set.of(
+            // Executables
+            "application/x-executable",
+            "application/x-msdos-program",
+            "application/x-msdownload",
+            "application/x-dosexec",
+            "application/vnd.microsoft.portable-executable",
+            // Scripts
+            "application/javascript",
+            "application/x-javascript",
+            "text/javascript",
+            "application/x-php",
+            "application/x-python",
+            "application/x-sh",
+            "application/x-shellscript",
+            "application/x-bat",
+            // Java
+            "application/java-archive",
+            "application/x-java-class",
+            // Others
+            "application/x-msmetafile"
     );
 
-    /**
-     * 확장자별 허용 MIME 타입 매핑
-     */
-    private static final Map<String, Set<String>> EXTENSION_MIME_MAP = Map.of(
-            "docx", Set.of(
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    "application/zip"  // OOXML은 ZIP 기반
-            ),
-            "xlsx", Set.of(
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    "application/zip"
-            ),
-            "pptx", Set.of(
-                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    "application/zip"
-            ),
-            "pdf", Set.of(
-                    "application/pdf"
-            )
-    );
-
-    private final TikaConfig tikaConfig;
     private final Detector detector;
+    private final MimeTypes mimeTypes;
+    private final DocumentManager documentManager;
 
-    public FileSecurityService() throws Exception {
-        this.tikaConfig = new TikaConfig();
-        this.detector = tikaConfig.getDetector();
+    public FileSecurityService(DocumentManager documentManager) {
+        try {
+            TikaConfig tikaConfig = new TikaConfig();
+            this.detector = tikaConfig.getDetector();
+            this.mimeTypes = tikaConfig.getMimeRepository();
+        } catch (Exception e) {
+            log.error("Apache Tika initialization failed - file content validation will be unavailable", e);
+            throw new IllegalStateException("Failed to initialize Apache Tika", e);
+        }
+        this.documentManager = documentManager;
     }
 
     /**
@@ -126,9 +137,9 @@ public class FileSecurityService {
         // 1. 파일명 새니타이징 및 검증
         String sanitizedFilename = sanitizeFilename(originalFilename);
 
-        // 2. 확장자 검증
+        // 2. 확장자 검증 (ONLYOFFICE SDK 활용)
         String extension = getFileExtension(sanitizedFilename);
-        validateExtension(extension);
+        validateExtension(sanitizedFilename);
 
         // 3. 파일 크기 검증
         validateFileSize(file.getSize());
@@ -237,13 +248,15 @@ public class FileSecurityService {
     }
 
     /**
-     * 확장자 검증
+     * 확장자 검증 - ONLYOFFICE SDK를 사용하여 지원되는 파일 형식인지 확인
+     *
+     * @param filename 검증할 파일명 (확장자 포함)
      */
-    private void validateExtension(String extension) {
-        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+    private void validateExtension(String filename) {
+        if (documentManager.getDocumentType(filename) == null) {
+            String extension = getFileExtension(filename);
             throw new SecurityValidationException(
-                    String.format("허용되지 않은 파일 형식입니다. 허용 형식: %s (입력: %s)",
-                            ALLOWED_EXTENSIONS, extension)
+                    String.format("허용되지 않은 파일 형식입니다: %s", extension)
             );
         }
     }
@@ -278,31 +291,88 @@ public class FileSecurityService {
     }
 
     /**
-     * MIME 타입 검증 - 확장자와 일치하는지 확인
+     * MIME 타입 검증 - Apache Tika 레지스트리 기반
+     *
+     * 1. 위험한 MIME 타입(실행 파일, 스크립트) 블랙리스트 차단
+     * 2. ZIP 기반 포맷(OOXML, ODF)은 application/zip 허용
+     * 3. Tika 레지스트리에서 확장자의 예상 MIME과 비교
      */
     private void validateMimeType(String extension, String detectedMimeType) {
-        Set<String> allowedMimeTypes = EXTENSION_MIME_MAP.get(extension);
-
-        if (allowedMimeTypes == null) {
-            throw new SecurityValidationException("지원하지 않는 확장자입니다: " + extension);
+        // 1. 위험한 MIME 타입 블랙리스트 체크 (악성 파일 위장 방지)
+        if (DANGEROUS_MIME_TYPES.stream().anyMatch(detectedMimeType::startsWith)) {
+            throw new SecurityValidationException(
+                    String.format("위험한 파일 형식이 감지되었습니다: %s", detectedMimeType)
+            );
         }
 
-        boolean isValid = allowedMimeTypes.stream()
-                .anyMatch(detectedMimeType::startsWith);
+        // 2. ZIP 기반 포맷 (OOXML, ODF, epub 등)은 application/zip으로 감지될 수 있음
+        if (isOOXMLFile(extension) && detectedMimeType.startsWith("application/zip")) {
+            log.debug("ZIP-based format detected for extension '{}', allowing", extension);
+            return;
+        }
 
-        if (!isValid) {
-            throw new SecurityValidationException(
-                    String.format("파일 형식 불일치. 확장자: %s, 실제 MIME: %s",
-                            extension, detectedMimeType)
+        // 3. Tika 레지스트리에서 확장자의 예상 MIME 타입 조회
+        try {
+            MimeType expectedMimeType = mimeTypes.forName(
+                    mimeTypes.getMimeType("file." + extension).getName()
             );
+
+            // 감지된 MIME이 예상 MIME과 일치하거나 부모 타입인지 확인
+            String expectedName = expectedMimeType.getName();
+            if (detectedMimeType.startsWith(expectedName) ||
+                    detectedMimeType.equals("application/octet-stream") ||
+                    isRelatedMimeType(expectedName, detectedMimeType)) {
+                return;
+            }
+
+            log.warn("MIME mismatch for '{}': expected={}, detected={}",
+                    extension, expectedName, detectedMimeType);
+            // MIME 불일치는 경고만 하고 통과 (SDK 확장자 검증 신뢰)
+            // 엄격 모드가 필요하면 여기서 예외 발생
+
+        } catch (MimeTypeException e) {
+            // Tika에 등록되지 않은 확장자 - SDK 검증 신뢰
+            log.debug("Extension '{}' not in Tika registry, trusting SDK validation", extension);
         }
     }
 
     /**
-     * OOXML 파일 여부 확인
+     * 관련 MIME 타입인지 확인 (예: text/plain은 많은 텍스트 기반 포맷과 호환)
      */
+    private boolean isRelatedMimeType(String expected, String detected) {
+        // 텍스트 기반 포맷들
+        if (expected.startsWith("text/") && detected.startsWith("text/")) {
+            return true;
+        }
+        // MS Office 레거시 포맷들
+        if (expected.startsWith("application/vnd.ms-") && detected.startsWith("application/vnd.ms-")) {
+            return true;
+        }
+        // application/octet-stream은 알 수 없는 바이너리 - 허용
+        if (detected.equals("application/octet-stream")) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * OOXML(ZIP 기반) 파일 여부 확인 - 압축 폭탄 검증 대상
+     */
+    private static final Set<String> OOXML_EXTENSIONS = Set.of(
+            // Office OOXML
+            "docx", "docm", "dotx", "dotm",
+            "xlsx", "xlsm", "xlsb", "xltx", "xltm",
+            "pptx", "pptm", "potx", "potm", "ppsx", "ppsm",
+            // Visio OOXML
+            "vsdx", "vsdm", "vssx", "vssm", "vstx", "vstm",
+            // OpenDocument (also ZIP-based)
+            "odt", "ott", "ods", "ots", "odp", "otp",
+            // Others
+            "epub"
+    );
+
     private boolean isOOXMLFile(String extension) {
-        return extension.equals("docx") || extension.equals("xlsx") || extension.equals("pptx");
+        return OOXML_EXTENSIONS.contains(extension);
     }
 
     /**

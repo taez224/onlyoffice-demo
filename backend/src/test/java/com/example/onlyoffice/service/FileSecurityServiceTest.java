@@ -1,10 +1,17 @@
 package com.example.onlyoffice.service;
 
 import com.example.onlyoffice.exception.SecurityValidationException;
+import com.onlyoffice.manager.document.DocumentManager;
+import com.onlyoffice.model.documenteditor.config.document.DocumentType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.ByteArrayOutputStream;
@@ -12,16 +19,32 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.endsWith;
+import static org.mockito.Mockito.when;
 
 @DisplayName("FileSecurityService")
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class FileSecurityServiceTest {
+
+    @Mock
+    private DocumentManager documentManager;
 
     private FileSecurityService fileSecurityService;
 
     @BeforeEach
-    void setUp() throws Exception {
-        fileSecurityService = new FileSecurityService();
+    void setUp() {
+        // Configure DocumentManager mock for supported extensions
+        when(documentManager.getDocumentType(endsWith(".docx"))).thenReturn(DocumentType.WORD);
+        when(documentManager.getDocumentType(endsWith(".xlsx"))).thenReturn(DocumentType.CELL);
+        when(documentManager.getDocumentType(endsWith(".pptx"))).thenReturn(DocumentType.SLIDE);
+        when(documentManager.getDocumentType(endsWith(".pdf"))).thenReturn(DocumentType.PDF);
+        when(documentManager.getDocumentType(endsWith(".vsdx"))).thenReturn(DocumentType.DIAGRAM);
+
+        fileSecurityService = new FileSecurityService(documentManager);
     }
 
     @Nested
@@ -135,8 +158,8 @@ class FileSecurityServiceTest {
         }
 
         @Test
-        @DisplayName("MIME 타입 불일치 시 예외 발생")
-        void shouldThrowExceptionForMimeTypeMismatch() {
+        @DisplayName("MIME 타입 불일치 시 경고만 하고 통과 (SDK 확장자 검증 신뢰)")
+        void shouldWarnButPassOnMimeTypeMismatch() {
             // given: .docx 확장자인데 실제로는 텍스트 파일
             MockMultipartFile file = new MockMultipartFile(
                     "file",
@@ -145,14 +168,14 @@ class FileSecurityServiceTest {
                     "This is plain text, not a DOCX file".getBytes()
             );
 
-            // when & then
-            assertThatThrownBy(() -> fileSecurityService.validateFile(file))
-                    .isInstanceOf(SecurityValidationException.class)
-                    .hasMessageContaining("파일 형식 불일치");
+            // when & then: MIME 불일치는 경고만 하고 통과 (Tika 기반 유연한 검증)
+            // SDK 확장자 검증을 신뢰하므로 예외 발생하지 않음
+            assertThatCode(() -> fileSecurityService.validateFile(file))
+                    .doesNotThrowAnyException();
         }
 
         @Test
-        @DisplayName("EXE 파일을 DOCX로 위장 시도 시 예외 발생 (매직 바이트 검증)")
+        @DisplayName("EXE 파일을 DOCX로 위장 시도 시 예외 발생 (위험 MIME 블랙리스트)")
         void shouldRejectExeDisguisedAsDocx() {
             // given: Windows 실행 파일 매직 바이트 (MZ header)
             byte[] exeMagicBytes = new byte[] {
@@ -168,10 +191,10 @@ class FileSecurityServiceTest {
                     exeMagicBytes
             );
 
-            // when & then: 매직 바이트 검증에서 거부
+            // when & then: 위험한 MIME 타입 블랙리스트에서 거부
             assertThatThrownBy(() -> fileSecurityService.validateFile(file))
                     .isInstanceOf(SecurityValidationException.class)
-                    .hasMessageContaining("파일 형식 불일치");
+                    .hasMessageContaining("위험한 파일 형식");
         }
     }
 

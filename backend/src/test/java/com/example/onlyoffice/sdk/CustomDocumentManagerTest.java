@@ -1,7 +1,8 @@
 package com.example.onlyoffice.sdk;
 
 import com.example.onlyoffice.entity.Document;
-import com.example.onlyoffice.service.DocumentService;
+import com.example.onlyoffice.exception.DocumentNotFoundException;
+import com.example.onlyoffice.repository.DocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -11,6 +12,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -19,7 +21,7 @@ class CustomDocumentManagerTest {
 
     private CustomDocumentManager documentManager;
     private CustomSettingsManager settingsManager;
-    private DocumentService documentService;
+    private DocumentRepository documentRepository;
 
     @BeforeEach
     void setUp() {
@@ -29,10 +31,10 @@ class CustomDocumentManagerTest {
         ReflectionTestUtils.setField(settingsManager, "jwtSecret", "test-secret");
         ReflectionTestUtils.setField(settingsManager, "serverBaseUrl", "http://localhost:8080");
 
-        // Mock DocumentService
-        documentService = mock(DocumentService.class);
+        // Mock DocumentRepository
+        documentRepository = mock(DocumentRepository.class);
 
-        documentManager = new CustomDocumentManager(settingsManager, documentService);
+        documentManager = new CustomDocumentManager(settingsManager, documentRepository);
     }
 
     @Nested
@@ -41,14 +43,18 @@ class CustomDocumentManagerTest {
 
         @Test
         @DisplayName("fileKey로 Document를 조회하여 editorKey 반환")
-        void shouldReturnEditorKeyFromDocumentService() {
+        void shouldReturnEditorKeyFromRepository() {
             // given
             String fileKey = "550e8400-e29b-41d4-a716-446655440000";
             String expectedKey = "550e8400-e29b-41d4-a716-446655440000_v1";
 
-            // Mock DocumentService behavior
-            when(documentService.getEditorKeyByFileKey(fileKey))
-                    .thenReturn(expectedKey);
+            Document document = Document.builder()
+                    .fileKey(fileKey)
+                    .editorVersion(1)
+                    .build();
+
+            when(documentRepository.findByFileKey(fileKey))
+                    .thenReturn(Optional.of(document));
 
             // when
             String result = documentManager.getDocumentKey(fileKey, false);
@@ -64,14 +70,34 @@ class CustomDocumentManagerTest {
             String fileKey = "abc-123-def-456";
             String expectedKey = "abc-123-def-456_v0";
 
-            when(documentService.getEditorKeyByFileKey(fileKey))
-                    .thenReturn(expectedKey);
+            Document document = Document.builder()
+                    .fileKey(fileKey)
+                    .editorVersion(0)
+                    .build();
+
+            when(documentRepository.findByFileKey(fileKey))
+                    .thenReturn(Optional.of(document));
 
             // when
             String result = documentManager.getDocumentKey(fileKey, false);
 
             // then
             assertThat(result).isEqualTo(expectedKey);
+        }
+
+        @Test
+        @DisplayName("Document를 찾을 수 없으면 예외 발생")
+        void shouldThrowExceptionWhenDocumentNotFound() {
+            // given
+            String fileKey = "unknown-file-key";
+
+            when(documentRepository.findByFileKey(fileKey))
+                    .thenReturn(Optional.empty());
+
+            // when & then
+            assertThatThrownBy(() -> documentManager.getDocumentKey(fileKey, false))
+                    .isInstanceOf(DocumentNotFoundException.class)
+                    .hasMessageContaining(fileKey);
         }
     }
 
@@ -91,7 +117,7 @@ class CustomDocumentManagerTest {
                     .fileKey(fileKey)
                     .build();
 
-            when(documentService.findByFileKey(fileKey))
+            when(documentRepository.findByFileKey(fileKey))
                     .thenReturn(Optional.of(document));
 
             // when
@@ -102,19 +128,18 @@ class CustomDocumentManagerTest {
         }
 
         @Test
-        @DisplayName("Document를 찾을 수 없으면 fileKey를 fallback으로 반환")
-        void shouldReturnFileKeyAsFallbackWhenDocumentNotFound() {
+        @DisplayName("Document를 찾을 수 없으면 예외 발생")
+        void shouldThrowExceptionWhenDocumentNotFound() {
             // given
             String fileKey = "unknown-file-key";
 
-            when(documentService.findByFileKey(fileKey))
+            when(documentRepository.findByFileKey(fileKey))
                     .thenReturn(Optional.empty());
 
-            // when
-            String result = documentManager.getDocumentName(fileKey);
-
-            // then
-            assertThat(result).isEqualTo(fileKey);
+            // when & then
+            assertThatThrownBy(() -> documentManager.getDocumentName(fileKey))
+                    .isInstanceOf(DocumentNotFoundException.class)
+                    .hasMessageContaining(fileKey);
         }
 
         @Test
@@ -129,7 +154,7 @@ class CustomDocumentManagerTest {
                     .fileKey(fileKey)
                     .build();
 
-            when(documentService.findByFileKey(fileKey))
+            when(documentRepository.findByFileKey(fileKey))
                     .thenReturn(Optional.of(document));
 
             // when

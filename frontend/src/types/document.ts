@@ -7,7 +7,7 @@
 export type DocumentStatus = 'PENDING' | 'ACTIVE' | 'DELETED';
 
 /** 문서 타입 (ONLYOFFICE) */
-export type DocumentType = 'word' | 'cell' | 'slide';
+export type DocumentType = 'word' | 'cell' | 'slide' | 'pdf' | 'diagram';
 
 /** GET /api/documents 응답 */
 export interface DocumentResponse {
