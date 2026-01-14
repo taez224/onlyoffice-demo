@@ -30,6 +30,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Workflow,
 } from 'lucide-react';
 import { formatFileSize, formatDateTime } from '@/lib/format';
 import type { DocumentResponse } from '@/types/document';
@@ -52,39 +53,42 @@ const CELL_STYLES: Record<string, string> = {
   actions: 'text-center',
 };
 
-function getFileIcon(fileType: string) {
-  const type = fileType.toUpperCase();
-  switch (type) {
-    case 'DOCX':
-    case 'DOC':
+/**
+ * documentType 기반 아이콘 (SDK 분류 활용)
+ * word, cell, slide, pdf, diagram 5가지만 처리하면 됨
+ */
+function getFileIcon(documentType: string) {
+  switch (documentType) {
+    case 'word':
       return <FileText className="text-blue-600 dark:text-blue-400" size={18} />;
-    case 'XLSX':
-    case 'XLS':
+    case 'cell':
       return <FileSpreadsheet className="text-emerald-600 dark:text-emerald-400" size={18} />;
-    case 'PPTX':
-    case 'PPT':
+    case 'slide':
       return <Presentation className="text-orange-600 dark:text-orange-400" size={18} />;
-    case 'PDF':
+    case 'pdf':
       return <FileType className="text-red-600 dark:text-red-400" size={18} />;
+    case 'diagram':
+      return <Workflow className="text-indigo-600 dark:text-indigo-400" size={18} />;
     default:
       return <File className="text-muted-foreground" size={18} />;
   }
 }
 
-function getTypeBadgeClass(fileType: string) {
-  const type = fileType.toUpperCase();
-  switch (type) {
-    case 'DOCX':
-    case 'DOC':
+/**
+ * documentType 기반 배지 스타일 (SDK 분류 활용)
+ */
+function getTypeBadgeClass(documentType: string) {
+  switch (documentType) {
+    case 'word':
       return 'bg-blue-100 dark:bg-blue-900/20';
-    case 'XLSX':
-    case 'XLS':
+    case 'cell':
       return 'bg-emerald-100 dark:bg-emerald-900/20';
-    case 'PPTX':
-    case 'PPT':
+    case 'slide':
       return 'bg-orange-100 dark:bg-orange-900/20';
-    case 'PDF':
+    case 'pdf':
       return 'bg-red-100 dark:bg-red-900/20';
+    case 'diagram':
+      return 'bg-indigo-100 dark:bg-indigo-900/20';
     default:
       return 'bg-muted';
   }
@@ -191,10 +195,10 @@ const columns: ColumnDef<DocumentResponse>[] = [
           href={`/editor/${row.original.fileKey}`}
           onClick={(e) => e.stopPropagation()}
           className={`w-8 h-8 flex items-center justify-center rounded-full ${getTypeBadgeClass(
-            row.original.fileType
+            row.original.documentType
           )} shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:shadow-sm`}
         >
-          {getFileIcon(row.original.fileType)}
+          {getFileIcon(row.original.documentType)}
         </Link>
         <Link
           href={`/editor/${row.original.fileKey}`}

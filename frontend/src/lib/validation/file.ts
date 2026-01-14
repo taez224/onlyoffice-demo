@@ -1,7 +1,25 @@
 export const MAX_FILE_SIZE_MB = 100;
 export const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 
-export const ALLOWED_EXTENSIONS = ['docx', 'xlsx', 'pptx', 'pdf'] as const;
+export const ALLOWED_EXTENSIONS = [
+  // Word (문서)
+  'doc', 'docm', 'docx', 'dot', 'dotm', 'dotx',
+  'epub', 'fb2', 'fodt', 'htm', 'html', 'mht', 'mhtml',
+  'odt', 'ott', 'rtf', 'txt', 'xml', 'md',
+  'hwp', 'hwpx', 'wps', 'wpt', 'pages',
+  // Cell (스프레드시트)
+  'csv', 'et', 'ett', 'fods', 'numbers',
+  'ods', 'ots', 'sxc',
+  'xls', 'xlsb', 'xlsm', 'xlsx', 'xlt', 'xltm', 'xltx',
+  // Slide (프레젠테이션)
+  'dps', 'dpt', 'fodp', 'key',
+  'odg', 'odp', 'otp',
+  'pot', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt', 'pptm', 'pptx',
+  // PDF
+  'djvu', 'pdf', 'xps', 'oxps',
+  // Diagram (Visio)
+  'vsdx', 'vsdm', 'vssx', 'vssm', 'vstx', 'vstm',
+] as const;
 
 export type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number];
 
