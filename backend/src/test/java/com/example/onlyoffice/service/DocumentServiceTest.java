@@ -63,6 +63,7 @@ class DocumentServiceTest {
         lenient().when(documentManager.getDocumentType(argThat(name -> name != null && name.endsWith(".xlsx")))).thenReturn(DocumentType.CELL);
         lenient().when(documentManager.getDocumentType(argThat(name -> name != null && name.endsWith(".pptx")))).thenReturn(DocumentType.SLIDE);
         lenient().when(documentManager.getDocumentType(argThat(name -> name != null && name.endsWith(".pdf")))).thenReturn(DocumentType.PDF);
+        lenient().when(documentManager.getDocumentType(argThat(name -> name != null && name.endsWith(".vsdx")))).thenReturn(DocumentType.DIAGRAM);
     }
 
     @Test
@@ -275,6 +276,21 @@ class DocumentServiceTest {
         assertThatThrownBy(() -> documentService.uploadDocument(multipartFile))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Unsupported file type");
+    }
+
+
+    @Test
+    @DisplayName("지원하지 않는 파일 형식 업로드 시 IllegalArgumentException 발생")
+    void uploadDocument_throwsExceptionForUnsupportedFileType() {
+        when(multipartFile.isEmpty()).thenReturn(false);
+        when(multipartFile.getOriginalFilename()).thenReturn("readme.txt");
+        when(fileSecurityService.sanitizeFilename("readme.txt")).thenReturn("readme.txt");
+        // .txt is not supported, so getDocumentType returns null (default mock behavior)
+
+        assertThatThrownBy(() -> documentService.uploadDocument(multipartFile))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported file type")
+                .hasMessageContaining("readme.txt");
     }
 
     @Test

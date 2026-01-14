@@ -210,6 +210,8 @@ public class DocumentService {
      * SDK의 포맷 데이터베이스를 활용하여 문서 타입 결정.
      * 지원하지 않는 확장자는 FileSecurityService에서 이미 검증되었으므로
      * 여기서 null이 반환되면 프로그래밍 오류임.
+     * 
+     * switch 문을 사용하여 SDK enum 변경 시 컴파일 타임에 감지되도록 함.
      */
     private String determineDocumentType(String fileName) {
         DocumentType type = documentManager.getDocumentType(fileName);
@@ -218,7 +220,13 @@ public class DocumentService {
                     "Unsupported file type: " + fileName + " (should have been validated by FileSecurityService)"
             );
         }
-        return type.name().toLowerCase(Locale.ROOT);
+        return switch (type) {
+            case WORD -> "word";
+            case CELL -> "cell";
+            case SLIDE -> "slide";
+            case PDF -> "pdf";
+            case DIAGRAM -> "diagram";
+        };
     }
 
     private String buildStoragePath(String fileKey, String sanitizedFilename) {
