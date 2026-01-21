@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default function HomePage() {
   const queryClient = getQueryClient();
 
-  queryClient.prefetchQuery(documentsQueryOptions());
+  void queryClient.prefetchQuery(documentsQueryOptions());
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>

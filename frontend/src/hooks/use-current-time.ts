@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, startTransition } from 'react';
 
 export function useCurrentTime() {
   const [currentTime, setCurrentTime] = useState(() =>
@@ -9,7 +9,9 @@ export function useCurrentTime() {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString('en-US', { hour12: false }));
+      startTransition(() => {
+        setCurrentTime(new Date().toLocaleTimeString('en-US', { hour12: false }));
+      });
     }, 1000);
     return () => clearInterval(timer);
   }, []);

@@ -133,4 +133,51 @@ class KeyUtilsTest {
             assertThat(KeyUtils.isValidKey("file#name")).isFalse();
         }
     }
+
+    @Nested
+    @DisplayName("isValidFileKey")
+    class IsValidFileKey {
+
+        @Test
+        @DisplayName("유효한 UUID는 true 반환")
+        void shouldReturnTrueForValidUuid() {
+            assertThat(KeyUtils.isValidFileKey("550e8400-e29b-41d4-a716-446655440000")).isTrue();
+            assertThat(KeyUtils.isValidFileKey("a1b2c3d4-e5f6-7890-abcd-ef1234567890")).isTrue();
+        }
+
+        @Test
+        @DisplayName("대문자 UUID는 false 반환")
+        void shouldReturnFalseForUppercaseUuid() {
+            assertThat(KeyUtils.isValidFileKey("550E8400-E29B-41D4-A716-446655440000")).isFalse();
+            assertThat(KeyUtils.isValidFileKey("A1B2C3D4-E5F6-7890-ABCD-EF1234567890")).isFalse();
+        }
+
+        @Test
+        @DisplayName("null은 false 반환")
+        void shouldReturnFalseForNull() {
+            assertThat(KeyUtils.isValidFileKey(null)).isFalse();
+        }
+
+        @Test
+        @DisplayName("빈 문자열은 false 반환")
+        void shouldReturnFalseForBlank() {
+            assertThat(KeyUtils.isValidFileKey("")).isFalse();
+            assertThat(KeyUtils.isValidFileKey("  ")).isFalse();
+        }
+
+        @Test
+        @DisplayName("잘못된 형식은 false 반환")
+        void shouldReturnFalseForInvalidFormat() {
+            assertThat(KeyUtils.isValidFileKey("not-a-uuid")).isFalse();
+            assertThat(KeyUtils.isValidFileKey("doc123_v5")).isFalse();
+            assertThat(KeyUtils.isValidFileKey("550e8400e29b41d4a716446655440000")).isFalse(); // 하이픈 없음
+        }
+
+        @Test
+        @DisplayName("generateFileKey()로 생성된 키는 유효")
+        void shouldReturnTrueForGeneratedFileKey() {
+            String generatedKey = KeyUtils.generateFileKey();
+            assertThat(KeyUtils.isValidFileKey(generatedKey)).isTrue();
+        }
+    }
 }

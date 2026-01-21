@@ -23,12 +23,10 @@ export function DocumentList({
   const { data: documents } = useDocumentsSuspense();
 
   const toggleAll = useCallback(() => {
-    if (selectedFileKeys.length === documents.length) {
-      setSelectedFileKeys([]);
-    } else {
-      setSelectedFileKeys(documents.map((d) => d.fileKey));
-    }
-  }, [selectedFileKeys.length, documents, setSelectedFileKeys]);
+    setSelectedFileKeys((prev) =>
+      prev.length === documents.length ? [] : documents.map((d) => d.fileKey)
+    );
+  }, [documents, setSelectedFileKeys]);
 
   return (
     <DocumentTable

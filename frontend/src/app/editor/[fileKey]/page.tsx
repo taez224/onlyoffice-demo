@@ -26,8 +26,8 @@ function LoadingState() {
         <div className="text-center p-8 max-w-md animate-in zoom-in-95 duration-500 fade-in">
           <div className="relative w-16 h-16 mx-auto mb-6">
             <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900/20 rounded-full animate-ping opacity-20" />
-            <div className="relative w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center border border-blue-100 dark:border-blue-800">
-              <Loader2 size={28} className="text-blue-600 animate-spin" />
+            <div className="relative w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center border border-blue-100 dark:border-blue-800 animate-spin">
+              <Loader2 size={28} className="text-blue-600" />
             </div>
           </div>
           <h2 className="text-lg font-bold text-foreground mb-2">Loading Editor...</h2>

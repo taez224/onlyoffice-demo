@@ -22,7 +22,7 @@ Documents use **UUID-based fileKey** as the primary identifier:
 3. Backend creates config via SDK `ConfigService`, signs it through `JwtManager`, and returns URLs pointing to `host.docker.internal:8080`.
 4. Document Server downloads `/files/{fileKey}`, users edit collaboratively, and callbacks hit `/callback?fileKey={uuid}`.
 5. Backend downloads the edited asset from the callback payload and overwrites `storage/{fileName}` while incrementing `editorVersion`.
-Ensure callback URLs remain reachable from inside Docker; regressions here block saving.
+   Ensure callback URLs remain reachable from inside Docker; regressions here block saving.
 
 ## Build & Test Commands
 ```bash
@@ -63,7 +63,7 @@ The `Document` entity uses Hibernate 7's native `@SoftDelete`:
 - Repository methods no longer need `AndDeletedAtIsNull` suffix
 
 ## Review Priorities
-- **FileKey correctness**: verify all APIs use UUID fileKey (not fileName); check `editorKey` format is `{fileKey}_v{version}`; ensure fileKey validation via `KeyUtils.isValidKey()`.
+- **FileKey correctness**: verify all APIs use UUID fileKey (not fileName); check `editorKey` format is `{fileKey}_v{version}`; ensure fileKey validation via `KeyUtils.isValidFileKey()` (UUID format) and editorKey validation via `KeyUtils.isValidKey()`.
 - **Config correctness**: verify document URLs, callback URLs, `key` generation, and JWT secret alignment (`onlyoffice.secret` vs `.env JWT_SECRET` vs docker-compose).
 - **Security**: ensure no plaintext secrets in code, restrict file names to prevent path traversal, validate fileKey as UUID format, and double-check MinIO/Postgres creds stay in env files.
 - **Persistence**: confirm modified documents land in `storage/` with correct fileName; verify `editorVersion` increments after SAVE callbacks (not FORCESAVE); check permissions suit Docker (use `ls -la storage/`).

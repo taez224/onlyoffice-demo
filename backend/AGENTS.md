@@ -24,7 +24,7 @@ Before running, copy `.env.example` to `.env` at repo root and ensure `onlyoffic
 - `service/DocumentService.java`: file I/O inside `storage/`; implements pessimistic locking for atomic callback updates.
 - `service/FileMigrationService.java`: utilities for migrating legacy assets (triggered via `MigrationController`).
 - `sdk/*`: overrides default SDK managers for custom URLs, document keys, permissions, and callbacks.
-- `util/KeyUtils.java`: UUID-based fileKey generation and editor key versioning (`{fileKey}_v{version}`); sanitizes keys for Document Server spec compliance.
+- `util/KeyUtils.java`: UUID-based fileKey generation (`generateFileKey()`), fileKey validation (`isValidFileKey()`), and editor key versioning (`{fileKey}_v{version}`); sanitizes keys for Document Server spec compliance.
 
 ## API Surface
 | Method | Path | Notes |
@@ -78,7 +78,7 @@ ONLYOFFICE Document Server may issue concurrent callback requests (e.g., SAVE/FO
 - **CallbackQueueService**: Maintains a `Map<String, ExecutorService>` with one single-threaded executor per `fileKey`.
   - **Same document**: callbacks queued sequentially on the document's executor, preventing concurrent writes.
   - **Different documents**: callbacks execute in parallel across separate executors for optimal performance.
-  
+
 - **Pessimistic Locking**: `DocumentRepository.findWithLockByFileKey()` acquires `PESSIMISTIC_WRITE` lock (3s timeout) during `processCallbackSave`/`processCallbackForceSave` to ensure atomic file overwrites and version updates.
 
 - **Graceful Shutdown**: Service awaits pending tasks for 30 seconds; forces shutdown if timeout exceeded.
@@ -97,7 +97,7 @@ ONLYOFFICE Document Server may issue concurrent callback requests (e.g., SAVE/FO
 ## Review Checklist
 1. **FileKey usage** – ensure all endpoints use UUID fileKey (not fileName); verify `DocumentRepository` queries use `findByFileKey()` for active documents (Hibernate 7 auto-filters deleted).
 2. **Config validity** – `documentUrl`, `callbackUrl`, `editorKey` (fileKey + version), and `jwt` must align with Docker hostnames; ensure `CustomUrlManager` updates stay consistent with controllers.
-3. **Security** – fileKey validation via `KeyUtils.isValidKey()` (UUID format + ONLYOFFICE spec), reject path traversal, never log secrets, and keep `.env`-sourced properties outside version control.
+3. **Security** – fileKey validation via `KeyUtils.isValidFileKey()` (UUID format), editorKey validation via `KeyUtils.isValidKey()` (ONLYOFFICE spec), reject path traversal, never log secrets, and keep `.env`-sourced properties outside version control.
 4. **Callbacks** – `CallbackController` extracts fileKey from query param, distinguishes between `Status.SAVE` (increments editorVersion), `FORCESAVE` (no version increment), errors, and returns `{ "error": 0 }` on success.
 5. **Storage** – confirm overwrites happen atomically with pessimistic locks; migrations use `FileMigrationService` to generate UUIDs for legacy files.
 6. **SDK upgrades** – prefer extending SDK managers rather than recreating DTOs; update `OnlyOfficeConfig` when new beans are required.
@@ -107,3 +107,11 @@ ONLYOFFICE Document Server may issue concurrent callback requests (e.g., SAVE/FO
 - **Callback failures**: check Docker logs (`docker-compose logs onlyoffice-docs`) and ensure `server.baseUrl` is reachable (`curl http://host.docker.internal:8080/api/health` if added).
 - **Permissions issues**: run `ls -la storage/` to verify host/containers share ownership; adjust volume mappings if callbacks cannot write edits.
 - **Legacy files without fileKey**: run `POST /api/admin/migration/files` to generate UUIDs for files in `storage/`; idempotent (skips already-migrated documents).
+
+## Configuration Reference
+
+| Property | Default | Description |
+| --- | --- | --- |
+| `streaming.async-timeout-ms` | `300000` | Async request timeout for file streaming (5 min default) |
+| `callback.executor.idle-timeout-minutes` | `30` | Cleanup idle per-document executors after this duration |
+| `callback.executor.cleanup-interval-minutes` | `5` | Interval for running executor cleanup job |

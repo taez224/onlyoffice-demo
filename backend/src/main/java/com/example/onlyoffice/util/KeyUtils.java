@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 
 /**
  * ONLYOFFICE document.key 생성 및 검증 유틸리티.
- *
+ * <p>
  * OnlyOffice 스펙:
  * - key 최대 길이: 128자
  * - 특수문자 사용 불가 (영문, 숫자, _, - 만 허용)
@@ -30,6 +30,18 @@ public final class KeyUtils {
      * 해시 길이 (MD5 일부 사용)
      */
     private static final int HASH_LENGTH = 16;
+
+    /**
+     * UUID 정규식 (소문자만 허용)
+     * UUID.randomUUID()는 소문자를 생성하므로 소문자만 허용합니다.
+     * 다른 클래스에서 Bean Validation @Pattern 등에 사용 가능.
+     */
+    public static final String UUID_REGEX = "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$";
+
+    /**
+     * UUID 패턴 (내부 검증용)
+     */
+    private static final Pattern UUID_PATTERN = Pattern.compile(UUID_REGEX);
 
     private KeyUtils() {
         // 유틸리티 클래스 - 인스턴스화 방지
@@ -98,7 +110,7 @@ public final class KeyUtils {
      */
     private static String generateHashBasedKey(String fileKey, int version) {
         String hash = DigestUtils.md5DigestAsHex(
-            fileKey.getBytes(StandardCharsets.UTF_8)
+                fileKey.getBytes(StandardCharsets.UTF_8)
         ).substring(0, HASH_LENGTH);
 
         return hash + "_v" + version;
@@ -106,7 +118,7 @@ public final class KeyUtils {
 
     /**
      * UUID 기반 fileKey 생성 (신규 문서용)
-     *
+     * <p>
      * UUID는 충돌 위험이 없고 보안적으로 예측 불가능하여
      * 문서의 고유 식별자로 적합합니다.
      *
@@ -116,5 +128,19 @@ public final class KeyUtils {
         return UUID.randomUUID().toString();
     }
 
-    
+    /**
+     * fileKey가 유효한 UUID 형식인지 검증.
+     * <p>
+     * ONLYOFFICE 연동에서 fileKey는 UUID 형식이어야 합니다.
+     * 소문자 UUID만 허용합니다 (UUID.randomUUID()가 소문자 생성).
+     *
+     * @param fileKey 검증할 fileKey
+     * @return 유효한 UUID 형식이면 true
+     */
+    public static boolean isValidFileKey(String fileKey) {
+        if (fileKey == null || fileKey.isBlank()) {
+            return false;
+        }
+        return UUID_PATTERN.matcher(fileKey).matches();
+    }
 }
