@@ -63,7 +63,7 @@ The `Document` entity uses Hibernate 7's native `@SoftDelete`:
 - Repository methods no longer need `AndDeletedAtIsNull` suffix
 
 ## Review Priorities
-- **FileKey correctness**: verify all APIs use UUID fileKey (not fileName); check `editorKey` format is `{fileKey}_v{version}`; ensure fileKey validation via `KeyUtils.isValidKey()`.
+- **FileKey correctness**: verify all APIs use UUID fileKey (not fileName); check `editorKey` format is `{fileKey}_v{version}`; ensure fileKey validation via `KeyUtils.isValidFileKey()` (UUID format) and editorKey validation via `KeyUtils.isValidKey()`.
 - **Config correctness**: verify document URLs, callback URLs, `key` generation, and JWT secret alignment (`onlyoffice.secret` vs `.env JWT_SECRET` vs docker-compose).
 - **Security**: ensure no plaintext secrets in code, restrict file names to prevent path traversal, validate fileKey as UUID format, and double-check MinIO/Postgres creds stay in env files.
 - **Persistence**: confirm modified documents land in `storage/` with correct fileName; verify `editorVersion` increments after SAVE callbacks (not FORCESAVE); check permissions suit Docker (use `ls -la storage/`).

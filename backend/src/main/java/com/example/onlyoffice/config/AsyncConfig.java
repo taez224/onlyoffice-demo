@@ -1,5 +1,6 @@
 package com.example.onlyoffice.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.AsyncTaskExecutor;
@@ -16,12 +17,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class AsyncConfig implements WebMvcConfigurer {
 
-    private static final long ASYNC_TIMEOUT_MS = 300_000L; // 5분
+    @Value("${streaming.async-timeout-ms:300000}")
+    private long asyncTimeoutMs;
 
     @Override
     public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
         configurer.setTaskExecutor(streamingTaskExecutor());
-        configurer.setDefaultTimeout(ASYNC_TIMEOUT_MS);
+        configurer.setDefaultTimeout(asyncTimeoutMs);
     }
 
     /**

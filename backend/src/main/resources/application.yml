@@ -53,3 +53,7 @@ callback:
   executor:
     idle-timeout-minutes: 30      # Cleanup idle executors after 30 minutes
     cleanup-interval-minutes: 5   # Run cleanup job every 5 minutes
+
+# Streaming Configuration
+streaming:
+  async-timeout-ms: 300000  # 5분 (기본값)

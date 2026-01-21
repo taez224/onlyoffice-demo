@@ -5,6 +5,7 @@ import com.example.onlyoffice.entity.DocumentStatus;
 import com.example.onlyoffice.exception.DocumentNotFoundException;
 import com.example.onlyoffice.exception.GlobalExceptionHandler;
 import com.example.onlyoffice.service.DocumentService;
+import com.example.onlyoffice.service.MinioStorageService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -38,8 +39,12 @@ class FileControllerTest {
     @MockitoBean
     private DocumentService documentService;
 
+    @MockitoBean
+    private MinioStorageService storageService;
+
     private static final String FILE_KEY = "550e8400-e29b-41d4-a716-446655440000";
     private static final String NON_EXISTENT_FILE_KEY = "00000000-0000-0000-0000-000000000000";
+    private static final String STORAGE_PATH = "documents/" + FILE_KEY + "/test.docx";
 
     @Nested
     @DisplayName("GET /files/{fileKey}")
@@ -54,7 +59,7 @@ class FileControllerTest {
             Document document = createDocument(1L, "test.docx", FILE_KEY, fileBytes.length);
 
             when(documentService.findByFileKey(FILE_KEY)).thenReturn(Optional.of(document));
-            when(documentService.downloadDocumentStream(FILE_KEY))
+            when(storageService.downloadFile(document.getStoragePath()))
                     .thenReturn(new ByteArrayInputStream(fileBytes));
 
             // when - StreamingResponseBody는 비동기이므로 asyncDispatch 사용
@@ -88,7 +93,7 @@ class FileControllerTest {
             Document document = createDocument(1L, koreanFileName, FILE_KEY, fileBytes.length);
 
             when(documentService.findByFileKey(FILE_KEY)).thenReturn(Optional.of(document));
-            when(documentService.downloadDocumentStream(FILE_KEY))
+            when(storageService.downloadFile(document.getStoragePath()))
                     .thenReturn(new ByteArrayInputStream(fileBytes));
 
             // when
@@ -128,6 +133,17 @@ class FileControllerTest {
         }
 
         @Test
+        @DisplayName("잘못된 fileKey 형식 시 400 반환")
+        void shouldReturn400WhenInvalidFileKeyFormat() throws Exception {
+            // given
+            String invalidFileKey = "invalid-key-format";
+
+            // when & then
+            mockMvc.perform(get("/files/{fileKey}", invalidFileKey))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
         @DisplayName("빈 파일 다운로드 성공")
         void shouldDownloadEmptyFile() throws Exception {
             // given
@@ -135,7 +151,7 @@ class FileControllerTest {
             Document document = createDocument(1L, "empty.txt", FILE_KEY, 0);
 
             when(documentService.findByFileKey(FILE_KEY)).thenReturn(Optional.of(document));
-            when(documentService.downloadDocumentStream(FILE_KEY))
+            when(storageService.downloadFile(document.getStoragePath()))
                     .thenReturn(new ByteArrayInputStream(emptyBytes));
 
             // when
@@ -162,7 +178,7 @@ class FileControllerTest {
             Document document = createDocument(1L, "large.bin", FILE_KEY, fileSize);
 
             when(documentService.findByFileKey(FILE_KEY)).thenReturn(Optional.of(document));
-            when(documentService.downloadDocumentStream(FILE_KEY))
+            when(storageService.downloadFile(document.getStoragePath()))
                     .thenReturn(new ByteArrayInputStream(largeFileBytes));
 
             // when

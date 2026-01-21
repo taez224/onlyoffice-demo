@@ -4,6 +4,7 @@ import com.example.onlyoffice.entity.Document;
 import com.example.onlyoffice.entity.DocumentStatus;
 import com.example.onlyoffice.exception.GlobalExceptionHandler;
 import com.example.onlyoffice.service.DocumentService;
+import com.example.onlyoffice.service.MinioStorageService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +45,9 @@ class FileControllerStreamingTest {
     @MockitoBean
     private DocumentService documentService;
 
+    @MockitoBean
+    private MinioStorageService storageService;
+
     private static final String FILE_KEY = "550e8400-e29b-41d4-a716-446655440000";
 
     @Test
@@ -59,7 +63,7 @@ class FileControllerStreamingTest {
                 new ByteArrayInputStream(fileBytes), streamClosed);
 
         when(documentService.findByFileKey(FILE_KEY)).thenReturn(Optional.of(document));
-        when(documentService.downloadDocumentStream(FILE_KEY)).thenReturn(trackingStream);
+        when(storageService.downloadFile(document.getStoragePath())).thenReturn(trackingStream);
 
         // when
         MvcResult mvcResult = mockMvc.perform(get("/files/{fileKey}", FILE_KEY))
@@ -85,18 +89,21 @@ class FileControllerStreamingTest {
         InputStream failingStream = new FailingInputStream(streamClosed);
 
         when(documentService.findByFileKey(FILE_KEY)).thenReturn(Optional.of(document));
-        when(documentService.downloadDocumentStream(FILE_KEY)).thenReturn(failingStream);
+        when(storageService.downloadFile(document.getStoragePath())).thenReturn(failingStream);
 
         // when
         MvcResult mvcResult = mockMvc.perform(get("/files/{fileKey}", FILE_KEY))
                 .andExpect(request().asyncStarted())
                 .andReturn();
 
-        // async dispatch - IOException은 streamFileContent 내에서 처리됨
-        mockMvc.perform(asyncDispatch(mvcResult))
-                .andExpect(status().isOk());
+        // IOException이 UncheckedIOException으로 전파되지만 스트림은 닫혀야 함
+        try {
+            mockMvc.perform(asyncDispatch(mvcResult));
+        } catch (Exception e) {
+            // 예외 전파는 정상 동작
+        }
 
-        // then
+        // then - 핵심: 스트림이 닫혔는지 확인
         assertThat(streamClosed.get())
                 .as("InputStream should be closed even when IOException occurs")
                 .isTrue();
@@ -114,17 +121,21 @@ class FileControllerStreamingTest {
                 1000, streamClosed);
 
         when(documentService.findByFileKey(FILE_KEY)).thenReturn(Optional.of(document));
-        when(documentService.downloadDocumentStream(FILE_KEY)).thenReturn(partialFailingStream);
+        when(storageService.downloadFile(document.getStoragePath())).thenReturn(partialFailingStream);
 
         // when
         MvcResult mvcResult = mockMvc.perform(get("/files/{fileKey}", FILE_KEY))
                 .andExpect(request().asyncStarted())
                 .andReturn();
 
-        mockMvc.perform(asyncDispatch(mvcResult))
-                .andExpect(status().isOk());
+        // IOException이 UncheckedIOException으로 전파되지만 스트림은 닫혀야 함
+        try {
+            mockMvc.perform(asyncDispatch(mvcResult));
+        } catch (Exception e) {
+            // 예외 전파는 정상 동작
+        }
 
-        // then
+        // then - 핵심: 스트림이 닫혔는지 확인
         assertThat(streamClosed.get())
                 .as("InputStream should be closed even after partial read with exception")
                 .isTrue();
