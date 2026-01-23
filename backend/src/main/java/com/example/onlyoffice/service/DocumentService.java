@@ -107,16 +107,15 @@ public class DocumentService {
                 .orElseThrow(() -> new DocumentNotFoundException(id));
 
         String storagePath = document.getStoragePath();
-        DocumentStatus originalStatus = document.getStatus();
 
+        // Hibernate 7 @SoftDelete: delete() sets deleted_at automatically
         documentRepository.delete(document);
-        // flush() syncs to DB but does NOT commit - transaction still active for rollback
-        documentRepository.flush();
 
         try {
             storageService.deleteFile(storagePath);
         } catch (Exception e) {
-            documentRepository.restoreWithStatus(id, originalStatus);
+            // No manual restore needed - exception triggers @Transactional rollback
+            log.error("Failed to delete file from storage: {}, document id: {}", storagePath, id, e);
             throw new DocumentDeleteException("Delete failed for document id " + id, e);
         }
     }
@@ -210,7 +209,7 @@ public class DocumentService {
      * SDK의 포맷 데이터베이스를 활용하여 문서 타입 결정.
      * 지원하지 않는 확장자는 FileSecurityService에서 이미 검증되었으므로
      * 여기서 null이 반환되면 프로그래밍 오류임.
-     * 
+     * <p>
      * switch 문을 사용하여 SDK enum 변경 시 컴파일 타임에 감지되도록 함.
      */
     private String determineDocumentType(String fileName) {

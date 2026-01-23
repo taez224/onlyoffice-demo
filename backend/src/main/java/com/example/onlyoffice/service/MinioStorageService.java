@@ -76,7 +76,7 @@ public class MinioStorageService {
 
     /**
      * InputStream을 MinIO에 업로드 (크기가 불명확한 스트림도 지원)
-     * 
+     *
      * <p>재시도 정책: 네트워크 장애 등으로 실패 시 최대 3회 재시도 (1초 간격)</p>
      *
      * @param inputStream 업로드할 InputStream
@@ -138,7 +138,7 @@ public class MinioStorageService {
 
     /**
      * MinIO에서 파일을 삭제
-     * 
+     *
      * <p>재시도 정책: 네트워크 장애 등으로 실패 시 최대 3회 재시도 (1초 간격)</p>
      *
      * @param objectName The object key/path in MinIO

@@ -6,25 +6,22 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.NaturalId;
-import org.hibernate.annotations.SoftDelete;
-import org.hibernate.annotations.SoftDeleteType;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.*;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
 
 @Entity
 @Table(
-    name = "documents",
-    indexes = {
-        @Index(name = "idx_file_key", columnList = "file_key"),
-        @Index(name = "idx_file_name", columnList = "file_name"),
-        @Index(name = "idx_created_at", columnList = "created_at"),
-        @Index(name = "idx_status", columnList = "status"),
-        @Index(name = "idx_deleted_at", columnList = "deleted_at")
-    }
+        name = "documents",
+        indexes = {
+                // Sorting index
+                @Index(name = "idx_created_at", columnList = "created_at"),
+                // Composite indexes for soft delete query optimization
+                @Index(name = "idx_file_key_deleted_at", columnList = "file_key, deleted_at"),
+                @Index(name = "idx_file_name_deleted_at", columnList = "file_name, deleted_at"),
+                @Index(name = "idx_status_deleted_at", columnList = "status, deleted_at")
+        }
 )
 @SoftDelete(strategy = SoftDeleteType.TIMESTAMP, columnName = "deleted_at")
 @Getter
