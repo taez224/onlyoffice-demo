@@ -157,25 +157,24 @@ class DocumentServiceTest {
         documentService.deleteDocument(document.getId());
 
         verify(documentRepository).delete(document);
-        verify(documentRepository).flush();
         verify(storageService).deleteFile(document.getStoragePath());
     }
 
     @Test
-    @DisplayName("삭제 중 MinIO 오류가 발생하면 상태를 복구한다")
-    void deleteDocument_restoresStateWhenStorageFails() {
+    @DisplayName("삭제 중 MinIO 오류가 발생하면 예외를 던진다")
+    void deleteDocument_throwsExceptionWhenStorageFails() {
         Document document = buildDocument();
         when(documentRepository.findWithLockById(document.getId())).thenReturn(Optional.of(document));
         doThrow(new RuntimeException("delete boom"))
                 .when(storageService).deleteFile(document.getStoragePath());
-        when(documentRepository.restoreWithStatus(document.getId(), document.getStatus())).thenReturn(1);
 
         assertThatThrownBy(() -> documentService.deleteDocument(document.getId()))
                 .isInstanceOf(DocumentDeleteException.class)
                 .hasMessageContaining("Delete failed");
 
         verify(documentRepository).delete(document);
-        verify(documentRepository).restoreWithStatus(document.getId(), document.getStatus());
+        verify(storageService).deleteFile(document.getStoragePath());
+        // restoreWithStatus 검증 제거 - @Transactional 롤백에 의존
     }
 
     @Test
