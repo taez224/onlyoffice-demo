@@ -3,14 +3,12 @@ package com.example.onlyoffice.service;
 import com.example.onlyoffice.exception.SecurityValidationException;
 import com.onlyoffice.manager.document.DocumentManager;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.tika.Tika;
 import org.apache.tika.config.TikaConfig;
 import org.apache.tika.detect.Detector;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.TikaCoreProperties;
 import org.apache.tika.mime.MediaType;
-import org.apache.tika.mime.MimeType;
-import org.apache.tika.mime.MimeTypeException;
-import org.apache.tika.mime.MimeTypes;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,7 +17,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -99,14 +96,14 @@ public class FileSecurityService {
     );
 
     private final Detector detector;
-    private final MimeTypes mimeTypes;
+    private final Tika tika;
     private final DocumentManager documentManager;
 
     public FileSecurityService(DocumentManager documentManager) {
         try {
             TikaConfig tikaConfig = new TikaConfig();
             this.detector = tikaConfig.getDetector();
-            this.mimeTypes = tikaConfig.getMimeRepository();
+            this.tika = new Tika(tikaConfig);
         } catch (Exception e) {
             log.error("Apache Tika initialization failed - file content validation will be unavailable", e);
             throw new IllegalStateException("Failed to initialize Apache Tika", e);
@@ -210,6 +207,10 @@ public class FileSecurityService {
         } while (!sanitized.equals(previous));  // 변화가 없을 때까지 반복
 
         // 3. OS 레벨 경로 구분자 제거 (Paths.get().getFileName())
+        // SECURITY NOTE: 정적 분석기가 Path Traversal로 경고하지만, 이는 FALSE POSITIVE입니다.
+        // - sanitized는 이미 위에서 ../와 ..\\ 패턴이 반복 제거된 상태
+        // - getFileName()은 추가 방어로 "/etc/passwd" → "passwd" 변환 수행
+        // - 아래 최종 검증에서 /, \\, : 등의 경로 문자 재확인
         Path path = Paths.get(sanitized).getFileName();
         if (path == null) {
             throw new SecurityValidationException("유효하지 않은 파일명입니다");
@@ -292,7 +293,7 @@ public class FileSecurityService {
 
     /**
      * MIME 타입 검증 - Apache Tika 레지스트리 기반
-     *
+     * <p>
      * 1. 위험한 MIME 타입(실행 파일, 스크립트) 블랙리스트 차단
      * 2. ZIP 기반 포맷(OOXML, ODF)은 application/zip 허용
      * 3. Tika 레지스트리에서 확장자의 예상 MIME과 비교
@@ -311,29 +312,26 @@ public class FileSecurityService {
             return;
         }
 
-        // 3. Tika 레지스트리에서 확장자의 예상 MIME 타입 조회
-        try {
-            MimeType expectedMimeType = mimeTypes.forName(
-                    mimeTypes.getMimeType("file." + extension).getName()
-            );
+        // 3. Tika를 사용하여 확장자의 예상 MIME 타입 조회
+        String expectedMimeType = tika.detect("file." + extension);
 
-            // 감지된 MIME이 예상 MIME과 일치하거나 부모 타입인지 확인
-            String expectedName = expectedMimeType.getName();
-            if (detectedMimeType.startsWith(expectedName) ||
-                    detectedMimeType.equals("application/octet-stream") ||
-                    isRelatedMimeType(expectedName, detectedMimeType)) {
-                return;
-            }
-
-            log.warn("MIME mismatch for '{}': expected={}, detected={}",
-                    extension, expectedName, detectedMimeType);
-            // MIME 불일치는 경고만 하고 통과 (SDK 확장자 검증 신뢰)
-            // 엄격 모드가 필요하면 여기서 예외 발생
-
-        } catch (MimeTypeException e) {
-            // Tika에 등록되지 않은 확장자 - SDK 검증 신뢰
-            log.debug("Extension '{}' not in Tika registry, trusting SDK validation", extension);
+        // application/octet-stream은 Tika가 확장자를 인식하지 못한 경우 - SDK 검증 신뢰
+        if ("application/octet-stream".equals(expectedMimeType)) {
+            log.debug("Extension '{}' not recognized by Tika, trusting SDK validation", extension);
+            return;
         }
+
+        // 감지된 MIME이 예상 MIME과 일치하거나 관련 타입인지 확인
+        if (detectedMimeType.startsWith(expectedMimeType) ||
+                detectedMimeType.equals("application/octet-stream") ||
+                isRelatedMimeType(expectedMimeType, detectedMimeType)) {
+            return;
+        }
+
+        log.warn("MIME mismatch for '{}': expected={}, detected={}",
+                extension, expectedMimeType, detectedMimeType);
+        // MIME 불일치는 경고만 하고 통과 (SDK 확장자 검증 신뢰)
+        // 엄격 모드가 필요하면 여기서 예외 발생
     }
 
     /**
@@ -349,10 +347,7 @@ public class FileSecurityService {
             return true;
         }
         // application/octet-stream은 알 수 없는 바이너리 - 허용
-        if (detected.equals("application/octet-stream")) {
-            return true;
-        }
-        return false;
+        return "application/octet-stream".equals(detected);
     }
 
     /**
